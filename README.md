@@ -153,7 +153,7 @@ Restart Claude Desktop after config changes.
 - `.env` and `.env.*` are gitignored; only `.env.example` is tracked.
 - Keep secrets in environment variables or secret managers.
 - Rotate credentials immediately if accidentally exposed.
-- CI and release workflows run secret scanning (`gitleaks`).
+- CI and release workflows run secret scanning with OSS `gitleaks` (no `GITLEAKS_LICENSE` secret required).
 
 ## Testing
 

@@ -45,7 +45,7 @@ git push origin main --tags
 
 ## What `release.yml` does on tag `v*`
 
-1. Runs secret scan (`gitleaks`)
+1. Runs secret scan (`gitleaks` OSS container; no `GITLEAKS_LICENSE` secret needed)
 2. Verifies tag version matches `pyproject.toml`
 3. Runs tests + compile + build
 4. Runs `twine check dist/*`
@@ -70,4 +70,9 @@ npx -y @modelcontextprotocol/inspector --cli \
   --method tools/list
 ```
 
-Expected: only `keyword_research`.
+Expected tools:
+- `keyword_ideas_from_keywords`
+- `keyword_ideas_from_url`
+- `keyword_ideas_from_keyword_and_url`
+- `keyword_ideas_from_site`
+- `keyword_ideas_historical`
