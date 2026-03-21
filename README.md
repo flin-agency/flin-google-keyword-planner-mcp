@@ -1,26 +1,74 @@
 # flin-google-keyword-planner-mcp
 
-MCP server for Google Ads Keyword Planner.
+MCP server for Google Ads Keyword Planner ideas.
 
-This server intentionally exposes exactly one read-only tool: `keyword_research`.
+This server exposes focused read-only tools so an LLM can clearly choose the right seed strategy.
 
-## Exposed MCP tool
+## Exposed MCP tools
 
-- `keyword_research`
+- `keyword_ideas_from_keywords`
+- `keyword_ideas_from_url`
+- `keyword_ideas_from_keyword_and_url`
+- `keyword_ideas_from_site`
+- `keyword_ideas_historical`
 
-## `keyword_research` parameters
+## Tool overview
 
-- `customer_id` (optional)
-- `keywords` (optional list)
-- `url` (optional)
-- `language_id` (optional, default `1000`)
-- `location_ids` (optional list, default `2840` = US)
-- `network` (optional, `GOOGLE_SEARCH` or `GOOGLE_SEARCH_AND_PARTNERS`)
-- `include_adult_keywords` (optional, default `false`)
-- `limit` (optional, default `50`, max `1000`)
-- `login_customer_id` (optional)
+### 1) `keyword_ideas_from_keywords`
 
-At least one seed is required: `keywords` and/or `url`.
+Generate ideas from a keyword list (`KeywordSeed`).
+
+Required:
+- `keywords`
+
+### 2) `keyword_ideas_from_url`
+
+Generate ideas from a page URL (`UrlSeed`).
+
+Required:
+- `url`
+
+### 3) `keyword_ideas_from_keyword_and_url`
+
+Generate ideas from keyword list + URL (`KeywordAndUrlSeed`).
+
+Required:
+- `keywords`
+- `url`
+
+### 4) `keyword_ideas_from_site`
+
+Generate ideas from a full site/domain (`SiteSeed`).
+
+Required:
+- `site_url`
+
+### 5) `keyword_ideas_historical`
+
+Generate ideas from keywords and constrain historical metrics to a year-month range.
+
+Required:
+- `keywords`
+- `start_year`
+- `start_month`
+- `end_year`
+- `end_month`
+
+Historical option:
+- `include_average_cpc` (default `false`)
+
+## Common optional parameters (all tools)
+
+- `customer_id`
+- `language_id` (default `1000`)
+- `location_ids` (default `2840` = US)
+- `network` (`GOOGLE_SEARCH` or `GOOGLE_SEARCH_AND_PARTNERS`)
+- `include_adult_keywords` (default `false`)
+- `limit` (default `50`, max `1000`)
+- `page_token`
+- `keyword_annotation` (currently: `KEYWORD_CONCEPT`)
+- `aggregate_metric_types` (currently: `DEVICE`)
+- `login_customer_id`
 
 ## Requirements
 

@@ -22,7 +22,8 @@ uv build
 
 What this validates:
 
-- tool registration and input normalization logic
+- MCP tool registration contract
+- input normalization and validation logic
 - Python syntax/import safety
 - package can be built into wheel and sdist
 
@@ -47,38 +48,84 @@ npx -y @modelcontextprotocol/inspector --cli \
   --method tools/list
 ```
 
-Expected:
+Expected tools:
 
-- `keyword_research`
+- `keyword_ideas_from_keywords`
+- `keyword_ideas_from_url`
+- `keyword_ideas_from_keyword_and_url`
+- `keyword_ideas_from_site`
+- `keyword_ideas_historical`
 
-### 2.3 Smoke test `keyword_research`
+### 2.3 Smoke tests per tool
 
-Keyword seed example:
+Keyword seed:
 
 ```bash
 npx -y @modelcontextprotocol/inspector --cli \
   uv run flin-google-keyword-planner-mcp \
   --method tools/call \
-  --tool-name keyword_research \
+  --tool-name keyword_ideas_from_keywords \
   --tool-arg customer_id=1234567890 \
   --tool-arg login_customer_id=1234567890 \
   --tool-arg 'keywords=["running shoes","trail shoes"]' \
-  --tool-arg language_id=1000 \
-  --tool-arg 'location_ids=["2840"]' \
-  --tool-arg network=GOOGLE_SEARCH_AND_PARTNERS \
   --tool-arg limit=20
 ```
 
-URL seed example:
+URL seed:
 
 ```bash
 npx -y @modelcontextprotocol/inspector --cli \
   uv run flin-google-keyword-planner-mcp \
   --method tools/call \
-  --tool-name keyword_research \
+  --tool-name keyword_ideas_from_url \
   --tool-arg customer_id=1234567890 \
   --tool-arg login_customer_id=1234567890 \
   --tool-arg url=https://example.com \
+  --tool-arg limit=20
+```
+
+Keyword + URL seed:
+
+```bash
+npx -y @modelcontextprotocol/inspector --cli \
+  uv run flin-google-keyword-planner-mcp \
+  --method tools/call \
+  --tool-name keyword_ideas_from_keyword_and_url \
+  --tool-arg customer_id=1234567890 \
+  --tool-arg login_customer_id=1234567890 \
+  --tool-arg 'keywords=["running shoes"]' \
+  --tool-arg url=https://example.com \
+  --tool-arg limit=20
+```
+
+Site seed:
+
+```bash
+npx -y @modelcontextprotocol/inspector --cli \
+  uv run flin-google-keyword-planner-mcp \
+  --method tools/call \
+  --tool-name keyword_ideas_from_site \
+  --tool-arg customer_id=1234567890 \
+  --tool-arg login_customer_id=1234567890 \
+  --tool-arg site_url=https://example.com \
+  --tool-arg limit=20
+```
+
+Historical keyword ideas:
+
+```bash
+npx -y @modelcontextprotocol/inspector --cli \
+  uv run flin-google-keyword-planner-mcp \
+  --method tools/call \
+  --tool-name keyword_ideas_historical \
+  --tool-arg customer_id=1234567890 \
+  --tool-arg login_customer_id=1234567890 \
+  --tool-arg 'keywords=["running shoes"]' \
+  --tool-arg start_year=2025 \
+  --tool-arg start_month=JANUARY \
+  --tool-arg end_year=2025 \
+  --tool-arg end_month=DECEMBER \
+  --tool-arg include_average_cpc=true \
   --tool-arg limit=20
 ```
 
@@ -107,8 +154,9 @@ Use this config:
 
 Then ask Claude:
 
-1. `Run keyword research for ["running shoes"] with limit 10`
-2. `Run keyword research from url https://example.com`
+1. `Run keyword_ideas_from_keywords with ["running shoes"] limit 10`
+2. `Run keyword_ideas_from_site with site_url https://example.com`
+3. `Run keyword_ideas_historical for ["running shoes"] from JANUARY 2025 to DECEMBER 2025`
 
 ## 4) Common failures and fixes
 
@@ -122,10 +170,15 @@ Then ask Claude:
 - OAuth user/token is valid but lacks account access or API permissions.
 - Fix: confirm account permissions and `login_customer_id` pairing.
 
-Seed validation error:
+Seed validation errors:
 
-- Both `keywords` and `url` are empty/missing.
-- Fix: pass at least one seed source.
+- Required seed argument missing or blank.
+- Fix: pass non-empty required seed fields.
+
+Historical range errors:
+
+- Incomplete range fields or invalid month/order.
+- Fix: pass all 4 range fields and valid month names/values.
 
 ## Recommended release gate
 
@@ -134,4 +187,4 @@ Before each release:
 1. `python3 -m pytest`
 2. `python3 -m compileall src`
 3. `uv build`
-4. Inspector smoke tests: `tools/list` and `keyword_research`
+4. Inspector smoke tests: `tools/list` + all 5 tool calls

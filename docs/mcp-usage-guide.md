@@ -2,26 +2,47 @@
 
 Use this guide when operating `flin-google-keyword-planner-mcp` from Claude or MCP Inspector.
 
-## Available tool
+## Available tools
 
-- `keyword_research`
+- `keyword_ideas_from_keywords`
+- `keyword_ideas_from_url`
+- `keyword_ideas_from_keyword_and_url`
+- `keyword_ideas_from_site`
+- `keyword_ideas_historical`
 
-No other tools are exposed.
+## Tool selection guide
 
-## Recommended call pattern
+Use:
+- `keyword_ideas_from_keywords` when you have keyword seeds only.
+- `keyword_ideas_from_url` when you have a landing page URL only.
+- `keyword_ideas_from_keyword_and_url` when you have both and want broader ideas.
+- `keyword_ideas_from_site` when you want domain-wide site seed expansion.
+- `keyword_ideas_historical` when you need year-month constrained historical metrics.
 
-1. Decide seed input:
-- `keywords` list, and/or
-- `url`
-2. Provide target scope:
-- `customer_id` (or set `GOOGLE_ADS_CUSTOMER_ID`)
-- optional `login_customer_id` for MCC flows
-3. Optionally tune:
-- `language_id` (default `1000`)
-- `location_ids` (default `2840` = US)
-- `network` (`GOOGLE_SEARCH` or `GOOGLE_SEARCH_AND_PARTNERS`)
+## Common parameters
+
+Most tools support:
+- `customer_id`
+- `login_customer_id`
+- `language_id`
+- `location_ids`
+- `network`
 - `include_adult_keywords`
 - `limit`
+- `page_token`
+- `keyword_annotation`
+- `aggregate_metric_types`
+
+## Historical tool parameters
+
+`keyword_ideas_historical` additionally requires:
+- `start_year`
+- `start_month`
+- `end_year`
+- `end_month`
+
+And supports:
+- `include_average_cpc`
 
 ## MCC and subaccount rules
 
@@ -35,14 +56,18 @@ No other tools are exposed.
 `missing_configuration`:
 - Required Google Ads env vars are missing.
 
-`ValueError` for seed:
-- `keywords` and `url` were both empty/missing.
+Seed validation errors:
+- Required seed field missing or empty (`keywords`, `url`, or `site_url` depending on tool).
+
+Historical range validation errors:
+- Missing one of `start_year/start_month/end_year/end_month`, or invalid month/range ordering.
 
 `USER_PERMISSION_DENIED` / `PERMISSION_DENIED`:
 - Verify OAuth user access, manager-client link, and `login_customer_id`.
 
 ## Output quality checklist
 
-- Always state which `customer_id` and `login_customer_id` were used.
-- Always state seed type (`keywords`, `url`, or both).
-- Treat returned keyword ideas as planning input, not guaranteed performance.
+- Always state which tool was used.
+- Always state `customer_id` and `login_customer_id` used.
+- Always state seed source (`keywords`, `url`, `keyword+url`, `site`).
+- Treat keyword ideas as planning input, not guaranteed outcomes.
