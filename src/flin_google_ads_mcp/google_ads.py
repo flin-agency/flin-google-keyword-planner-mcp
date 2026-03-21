@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from decimal import Decimal
 from functools import lru_cache
 from typing import Any
@@ -9,46 +8,15 @@ import re
 from .config import ConfigurationError, Settings, load_settings
 
 
-ALLOWED_DATE_RANGES = {
-    "TODAY",
-    "YESTERDAY",
-    "THIS_WEEK_MON_TODAY",
-    "THIS_WEEK_SUN_TODAY",
-    "LAST_WEEK_MON_SUN",
-    "LAST_WEEK_SUN_SAT",
-    "LAST_7_DAYS",
-    "LAST_14_DAYS",
-    "LAST_30_DAYS",
-    "LAST_60_DAYS",
-    "LAST_90_DAYS",
-    "THIS_MONTH",
-    "LAST_MONTH",
-    "CUSTOM",
+KEYWORD_PLAN_NETWORK_ALIASES = {
+    "GOOGLE_SEARCH": "GOOGLE_SEARCH",
+    "SEARCH": "GOOGLE_SEARCH",
+    "GOOGLE_SEARCH_AND_PARTNERS": "GOOGLE_SEARCH_AND_PARTNERS",
+    "SEARCH_AND_PARTNERS": "GOOGLE_SEARCH_AND_PARTNERS",
 }
 
-STATUS_ALIASES = {
-    "ACTIVE": "ENABLED",
-}
-
-ALLOWED_ENTITY_STATUS = {
-    "ALL",
-    "ENABLED",
-    "PAUSED",
-    "REMOVED",
-    "ACTIVE",
-}
-
-ALLOWED_INSIGHT_LEVELS = {"campaign", "ad_group", "ad"}
-
-ALLOWED_CUSTOMER_CLIENT_STATUS = {
-    "ALL",
-    "ENABLED",
-    "SUSPENDED",
-    "CANCELED",
-    "CLOSED",
-    "UNKNOWN",
-    "UNSPECIFIED",
-}
+DEFAULT_LANGUAGE_ID = "1000"
+DEFAULT_LOCATION_IDS = ("2840",)
 
 
 def normalize_customer_id(raw_customer_id: str) -> str:
@@ -65,7 +33,7 @@ def normalize_customer_id(raw_customer_id: str) -> str:
 def normalize_entity_id(raw_entity_id: str) -> str:
     cleaned = re.sub(r"\D", "", raw_entity_id)
     if not cleaned:
-        raise ValueError("Entity ID must contain at least one digit.")
+        raise ValueError("ID must contain at least one digit.")
     return cleaned
 
 
@@ -78,84 +46,48 @@ def resolve_customer_id(customer_id: str | None, settings: Settings) -> str:
     return normalize_customer_id(candidate)
 
 
-def normalize_status(status: str) -> str:
-    normalized = status.strip().upper()
-    normalized = STATUS_ALIASES.get(normalized, normalized)
-    if normalized not in ALLOWED_ENTITY_STATUS:
-        allowed = ", ".join(sorted(ALLOWED_ENTITY_STATUS))
-        raise ValueError(f"Invalid status {status!r}. Allowed values: {allowed}.")
-    return normalized
+def normalize_keyword_seed(
+    *, keywords: list[str] | None, url: str | None
+) -> tuple[list[str], str | None]:
+    cleaned_keywords = [
+        str(keyword).strip() for keyword in (keywords or []) if str(keyword).strip()
+    ]
+    cleaned_url = url.strip() if url is not None else None
+    if cleaned_url == "":
+        cleaned_url = None
+
+    if not cleaned_keywords and cleaned_url is None:
+        raise ValueError("At least one seed is required: keywords or url.")
+
+    return cleaned_keywords, cleaned_url
 
 
-def normalize_date_range(date_range: str) -> str:
-    normalized = date_range.strip().upper()
-    if normalized not in ALLOWED_DATE_RANGES:
-        allowed = ", ".join(sorted(ALLOWED_DATE_RANGES))
+def normalize_keyword_plan_network(network: str) -> str:
+    normalized = network.strip().upper()
+    resolved = KEYWORD_PLAN_NETWORK_ALIASES.get(normalized)
+    if resolved is None:
+        allowed = ", ".join(sorted(set(KEYWORD_PLAN_NETWORK_ALIASES.values())))
         raise ValueError(
-            f"Invalid date_range {date_range!r}. Allowed values: {allowed}."
+            f"Invalid keyword plan network {network!r}. Allowed values: {allowed}."
         )
-    return normalized
+    return resolved
 
 
-def normalize_iso_date(raw_date: str) -> str:
-    candidate = raw_date.strip()
-    try:
-        parsed = date.fromisoformat(candidate)
-    except ValueError as exc:
-        raise ValueError(
-            f"Invalid date {raw_date!r}. Expected format YYYY-MM-DD."
-        ) from exc
-    return parsed.isoformat()
+def build_language_constant_resource_name(language_id: str) -> str:
+    return f"languageConstants/{normalize_entity_id(language_id)}"
 
 
-def build_segments_date_filter(
-    *,
-    date_range: str,
-    start_date: str | None = None,
-    end_date: str | None = None,
-) -> str:
-    normalized_date_range = normalize_date_range(date_range)
+def build_geo_target_constant_resource_names(
+    location_ids: list[str] | None,
+) -> list[str]:
+    raw_ids = list(location_ids) if location_ids is not None else list(DEFAULT_LOCATION_IDS)
+    if not raw_ids:
+        raise ValueError("location_ids cannot be empty.")
 
-    if normalized_date_range == "CUSTOM":
-        if not start_date or not end_date:
-            raise ValueError(
-                "CUSTOM date_range requires both start_date and end_date."
-            )
-
-        normalized_start = normalize_iso_date(start_date)
-        normalized_end = normalize_iso_date(end_date)
-
-        if normalized_start > normalized_end:
-            raise ValueError("start_date must be less than or equal to end_date.")
-
-        return f"segments.date BETWEEN '{normalized_start}' AND '{normalized_end}'"
-
-    if start_date or end_date:
-        raise ValueError(
-            "start_date/end_date can only be used when date_range is CUSTOM."
-        )
-
-    return f"segments.date DURING {normalized_date_range}"
+    return [f"geoTargetConstants/{normalize_entity_id(raw_id)}" for raw_id in raw_ids]
 
 
-def normalize_insight_level(level: str) -> str:
-    normalized = level.strip().lower()
-    if normalized not in ALLOWED_INSIGHT_LEVELS:
-        allowed = ", ".join(sorted(ALLOWED_INSIGHT_LEVELS))
-        raise ValueError(f"Invalid level {level!r}. Allowed values: {allowed}.")
-    return normalized
-
-
-def normalize_customer_client_status(status: str) -> str:
-    normalized = status.strip().upper()
-    normalized = STATUS_ALIASES.get(normalized, normalized)
-    if normalized not in ALLOWED_CUSTOMER_CLIENT_STATUS:
-        allowed = ", ".join(sorted(ALLOWED_CUSTOMER_CLIENT_STATUS))
-        raise ValueError(f"Invalid status {status!r}. Allowed values: {allowed}.")
-    return normalized
-
-
-def clamp_limit(limit: int, *, default: int = 50, max_limit: int = 500) -> int:
+def clamp_limit(limit: int, *, default: int = 50, max_limit: int = 1000) -> int:
     if limit <= 0:
         return default
     return min(limit, max_limit)
@@ -187,31 +119,6 @@ def get_google_ads_client(login_customer_id: str | None = None) -> Any:
         )
 
     return GoogleAdsClient.load_from_dict(config_dict)
-
-
-def list_accessible_customer_ids(login_customer_id: str | None = None) -> list[str]:
-    client = get_google_ads_client(login_customer_id)
-    customer_service = client.get_service("CustomerService")
-    response = customer_service.list_accessible_customers()
-
-    customer_ids: list[str] = []
-    for resource_name in response.resource_names:
-        if resource_name.startswith("customers/"):
-            customer_ids.append(resource_name.split("/", 1)[1])
-    return customer_ids
-
-
-def run_search_query(
-    customer_id: str, query: str, login_customer_id: str | None = None
-) -> list[Any]:
-    client = get_google_ads_client(login_customer_id)
-    service = client.get_service("GoogleAdsService")
-
-    request = client.get_type("SearchGoogleAdsRequest")
-    request.customer_id = normalize_customer_id(customer_id)
-    request.query = query
-
-    return list(service.search(request=request))
 
 
 def enum_name(value: Any) -> str:
@@ -268,211 +175,93 @@ def format_google_ads_error(exc: Exception) -> dict[str, Any]:
     }
 
 
-def _status_filter_clause(field_name: str, status: str) -> str:
-    normalized_status = normalize_status(status)
-    if normalized_status == "ALL":
-        return ""
-    return f" AND {field_name} = {normalized_status}"
+def _monthly_search_volume_to_dict(volume: Any) -> dict[str, Any]:
+    return {
+        "year": to_int(getattr(volume, "year", None)),
+        "month": enum_name(getattr(volume, "month", "UNKNOWN")),
+        "monthly_searches": to_int(getattr(volume, "monthly_searches", None)),
+    }
 
 
-def build_campaign_query(*, status: str, limit: int) -> str:
-    return (
-        "SELECT campaign.id, campaign.name, campaign.status, "
-        "campaign.advertising_channel_type, campaign.serving_status "
-        "FROM campaign "
-        "WHERE campaign.id > 0"
-        f"{_status_filter_clause('campaign.status', status)} "
-        "ORDER BY campaign.id DESC "
-        f"LIMIT {clamp_limit(limit)}"
-    )
+def _keyword_idea_metrics_to_dict(metrics: Any) -> dict[str, Any]:
+    return {
+        "average_monthly_searches": to_int(getattr(metrics, "avg_monthly_searches", None)),
+        "competition": enum_name(getattr(metrics, "competition", "UNKNOWN")),
+        "competition_index": to_int(getattr(metrics, "competition_index", None)),
+        "low_top_of_page_bid": micros_to_currency(
+            getattr(metrics, "low_top_of_page_bid_micros", None)
+        ),
+        "high_top_of_page_bid": micros_to_currency(
+            getattr(metrics, "high_top_of_page_bid_micros", None)
+        ),
+        "average_cpc": micros_to_currency(getattr(metrics, "average_cpc_micros", None)),
+        "monthly_search_volumes": [
+            _monthly_search_volume_to_dict(volume)
+            for volume in getattr(metrics, "monthly_search_volumes", [])
+        ],
+    }
 
 
-def build_ad_group_query(
-    *, status: str, campaign_id: str | None, limit: int
-) -> str:
-    filters = ["ad_group.id > 0"]
-    if campaign_id:
-        filters.append(f"campaign.id = {normalize_entity_id(campaign_id)}")
-
-    status_filter = _status_filter_clause("ad_group.status", status)
-    if status_filter:
-        filters.append(status_filter.replace(" AND ", "", 1))
-
-    where_clause = " AND ".join(filters)
-    return (
-        "SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, "
-        "ad_group.status, ad_group.type, ad_group.cpc_bid_micros "
-        "FROM ad_group "
-        f"WHERE {where_clause} "
-        "ORDER BY ad_group.id DESC "
-        f"LIMIT {clamp_limit(limit)}"
-    )
-
-
-def build_ads_query(
+def generate_keyword_ideas(
     *,
-    status: str,
-    campaign_id: str | None,
-    ad_group_id: str | None,
-    limit: int,
-) -> str:
-    filters = ["ad_group_ad.ad.id > 0"]
-    if campaign_id:
-        filters.append(f"campaign.id = {normalize_entity_id(campaign_id)}")
-    if ad_group_id:
-        filters.append(f"ad_group.id = {normalize_entity_id(ad_group_id)}")
-
-    status_filter = _status_filter_clause("ad_group_ad.status", status)
-    if status_filter:
-        filters.append(status_filter.replace(" AND ", "", 1))
-
-    where_clause = " AND ".join(filters)
-    return (
-        "SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, "
-        "ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, "
-        "ad_group_ad.status, ad_group_ad.ad.final_urls, "
-        "ad_group_ad.ad.responsive_search_ad.headlines, "
-        "ad_group_ad.ad.responsive_search_ad.descriptions, "
-        "ad_group_ad.ad.responsive_search_ad.path1, "
-        "ad_group_ad.ad.responsive_search_ad.path2 "
-        "FROM ad_group_ad "
-        f"WHERE {where_clause} "
-        "ORDER BY ad_group_ad.ad.id DESC "
-        f"LIMIT {clamp_limit(limit)}"
+    customer_id: str,
+    keywords: list[str] | None,
+    url: str | None,
+    language_id: str = DEFAULT_LANGUAGE_ID,
+    location_ids: list[str] | None = None,
+    network: str = "GOOGLE_SEARCH_AND_PARTNERS",
+    include_adult_keywords: bool = False,
+    limit: int = 50,
+    login_customer_id: str | None = None,
+) -> list[dict[str, Any]]:
+    normalized_keywords, normalized_url = normalize_keyword_seed(
+        keywords=keywords,
+        url=url,
     )
-
-
-def build_insights_query(
-    *,
-    level: str,
-    date_range: str,
-    limit: int,
-    start_date: str | None = None,
-    end_date: str | None = None,
-) -> str:
-    normalized_level = normalize_insight_level(level)
+    normalized_network = normalize_keyword_plan_network(network)
     normalized_limit = clamp_limit(limit)
-    date_filter = build_segments_date_filter(
-        date_range=date_range,
-        start_date=start_date,
-        end_date=end_date,
-    )
 
-    metrics = (
-        "metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, "
-        "metrics.cost_micros, metrics.conversions, metrics.conversions_value"
-    )
+    client = get_google_ads_client(login_customer_id)
+    service = client.get_service("KeywordPlanIdeaService")
 
-    if normalized_level == "campaign":
-        return (
-            "SELECT campaign.id, campaign.name, campaign.status, "
-            f"{metrics} "
-            "FROM campaign "
-            f"WHERE {date_filter} "
-            "ORDER BY metrics.impressions DESC "
-            f"LIMIT {normalized_limit}"
+    request = client.get_type("GenerateKeywordIdeasRequest")
+    request.customer_id = normalize_customer_id(customer_id)
+    request.language = build_language_constant_resource_name(language_id)
+    request.geo_target_constants.extend(
+        build_geo_target_constant_resource_names(location_ids)
+    )
+    request.include_adult_keywords = bool(include_adult_keywords)
+    request.page_size = normalized_limit
+
+    try:
+        request.keyword_plan_network = getattr(
+            client.enums.KeywordPlanNetworkEnum,
+            normalized_network,
         )
+    except AttributeError as exc:
+        raise ValueError(
+            f"Unsupported keyword plan network {normalized_network!r} for this Google Ads client version."
+        ) from exc
 
-    if normalized_level == "ad_group":
-        return (
-            "SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, "
-            "ad_group.status, "
-            f"{metrics} "
-            "FROM ad_group "
-            f"WHERE {date_filter} "
-            "ORDER BY metrics.impressions DESC "
-            f"LIMIT {normalized_limit}"
-        )
-
-    return (
-        "SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, "
-        "ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, "
-        f"{metrics} "
-        "FROM ad_group_ad "
-        f"WHERE {date_filter} "
-        "ORDER BY metrics.impressions DESC "
-        f"LIMIT {normalized_limit}"
-    )
-
-
-def build_customer_clients_query(
-    *,
-    status: str,
-    direct_only: bool,
-    include_hidden: bool,
-    include_self: bool,
-    limit: int,
-) -> str:
-    normalized_status = normalize_customer_client_status(status)
-    filters = []
-
-    if include_self and direct_only:
-        filters.append("customer_client.level <= 1")
-    elif include_self:
-        filters.append("customer_client.level >= 0")
-    elif direct_only:
-        filters.append("customer_client.level = 1")
+    if normalized_keywords and normalized_url:
+        request.keyword_and_url_seed.url = normalized_url
+        request.keyword_and_url_seed.keywords.extend(normalized_keywords)
+    elif normalized_keywords:
+        request.keyword_seed.keywords.extend(normalized_keywords)
     else:
-        filters.append("customer_client.level > 0")
+        request.url_seed.url = normalized_url
 
-    if not include_hidden:
-        filters.append("customer_client.hidden = FALSE")
+    response = service.generate_keyword_ideas(request=request)
 
-    if normalized_status != "ALL":
-        filters.append(f"customer_client.status = {normalized_status}")
+    items: list[dict[str, Any]] = []
+    for idea in response:
+        items.append(
+            {
+                "keyword": str(idea.text),
+                "metrics": _keyword_idea_metrics_to_dict(idea.keyword_idea_metrics),
+            }
+        )
+        if len(items) >= normalized_limit:
+            break
 
-    where_clause = " AND ".join(filters)
-    return (
-        "SELECT customer_client.client_customer, customer_client.id, "
-        "customer_client.descriptive_name, customer_client.level, "
-        "customer_client.manager, customer_client.hidden, "
-        "customer_client.status, customer_client.currency_code, "
-        "customer_client.time_zone, customer_client.test_account "
-        "FROM customer_client "
-        f"WHERE {where_clause} "
-        "ORDER BY customer_client.level ASC, customer_client.id ASC "
-        f"LIMIT {clamp_limit(limit)}"
-    )
-
-
-def build_keywords_query(
-    *,
-    status: str,
-    date_range: str,
-    campaign_id: str | None,
-    ad_group_id: str | None,
-    limit: int,
-    start_date: str | None = None,
-    end_date: str | None = None,
-) -> str:
-    normalized_status = normalize_status(status)
-    date_filter = build_segments_date_filter(
-        date_range=date_range,
-        start_date=start_date,
-        end_date=end_date,
-    )
-
-    filters = [
-        "ad_group_criterion.type = KEYWORD",
-        date_filter,
-    ]
-
-    if campaign_id:
-        filters.append(f"campaign.id = {normalize_entity_id(campaign_id)}")
-    if ad_group_id:
-        filters.append(f"ad_group.id = {normalize_entity_id(ad_group_id)}")
-    if normalized_status != "ALL":
-        filters.append(f"ad_group_criterion.status = {normalized_status}")
-
-    where_clause = " AND ".join(filters)
-    return (
-        "SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, "
-        "ad_group_criterion.criterion_id, ad_group_criterion.status, "
-        "ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, "
-        "metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, "
-        "metrics.cost_micros, metrics.conversions, metrics.conversions_value "
-        "FROM keyword_view "
-        f"WHERE {where_clause} "
-        "ORDER BY metrics.impressions DESC "
-        f"LIMIT {clamp_limit(limit)}"
-    )
+    return items

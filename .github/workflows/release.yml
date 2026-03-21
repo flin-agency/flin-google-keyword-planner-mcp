@@ -6,18 +6,48 @@ on:
       - "v*"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+
+      - name: Validate tag version matches pyproject
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          python - <<'PY'
+          import pathlib
+          import tomllib
+
+          pyproject = pathlib.Path("pyproject.toml")
+          data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+          package_version = data["project"]["version"]
+          tag_version = "${{ github.ref_name }}".lstrip("v")
+          if package_version != tag_version:
+              raise SystemExit(
+                  f"Tag version v{tag_version} does not match pyproject version {package_version}."
+              )
+          print(f"Tag and package version match: v{tag_version}")
+          PY
 
       - name: Install dependencies
         run: uv sync --extra dev
@@ -25,8 +55,17 @@ jobs:
       - name: Run tests
         run: uv run python -m pytest
 
+      - name: Compile source
+        run: uv run python -m compileall src
+
       - name: Build package
         run: uv build
+
+      - name: Verify dist metadata
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install twine
+          twine check dist/*
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
@@ -40,9 +79,10 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/flin-google-ads-mcp
+      url: https://pypi.org/p/flin-google-keyword-planner-mcp
     permissions:
       id-token: write
+      contents: read
     steps:
       - name: Download dist artifacts
         uses: actions/download-artifact@v4
@@ -52,3 +92,23 @@ jobs:
 
       - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

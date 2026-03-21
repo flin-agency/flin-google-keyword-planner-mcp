@@ -1,51 +1,48 @@
 # MCP Usage Guide
 
-Use this guide when operating `flin-google-ads-mcp` from Claude or MCP Inspector.
+Use this guide when operating `flin-google-keyword-planner-mcp` from Claude or MCP Inspector.
 
-## Recommended call order
+## Available tool
 
-1. Run `health_check`
-2. Run `list_accessible_customers`
-3. If working with an MCC, run `get_customer_clients` first
-4. For subaccounts, always pass:
-- `customer_id` (client account)
-- `login_customer_id` (manager account)
-5. Then run data tools:
-- `get_campaigns`
-- `get_ads`
-- `get_keywords`
-- `get_insights`
+- `keyword_research`
 
-For metrics tools (`get_keywords`, `get_insights`), use either a preset `date_range` or `date_range=CUSTOM` with `start_date` + `end_date`.
+No other tools are exposed.
+
+## Recommended call pattern
+
+1. Decide seed input:
+- `keywords` list, and/or
+- `url`
+2. Provide target scope:
+- `customer_id` (or set `GOOGLE_ADS_CUSTOMER_ID`)
+- optional `login_customer_id` for MCC flows
+3. Optionally tune:
+- `language_id` (default `1000`)
+- `location_ids` (default `2840` = US)
+- `network` (`GOOGLE_SEARCH` or `GOOGLE_SEARCH_AND_PARTNERS`)
+- `include_adult_keywords`
+- `limit`
 
 ## MCC and subaccount rules
 
-- `list_accessible_customers` does not validate manager-header behavior for all operations.
-- `get_customer_clients` is the correct source for account hierarchy.
-- `USER_PERMISSION_DENIED` on subaccount calls is usually:
-- wrong `login_customer_id`
-- missing OAuth rights
-- inactive manager-client link
+- For subaccount access, pass both:
+- `customer_id` = client account
+- `login_customer_id` = manager account
+- `USER_PERMISSION_DENIED` usually means wrong manager/client pairing or missing account access.
 
 ## Common error handling
 
 `missing_configuration`:
-- One or more required env vars are missing in MCP config.
+- Required Google Ads env vars are missing.
 
-`USER_PERMISSION_DENIED`:
-- Check the `customer_id` and `login_customer_id` pairing.
-- Confirm OAuth user has access to both manager and client account.
-- Confirm the account link is active in Google Ads UI.
+`ValueError` for seed:
+- `keywords` and `url` were both empty/missing.
 
-`tool not loaded yet`:
-- Restart Claude.
-- Reload tools, then call again.
+`USER_PERMISSION_DENIED` / `PERMISSION_DENIED`:
+- Verify OAuth user access, manager-client link, and `login_customer_id`.
 
 ## Output quality checklist
 
 - Always state which `customer_id` and `login_customer_id` were used.
-- Do not infer account ownership from numeric IDs only.
-- Use `descriptive_name` from `get_customer_clients` for identity claims.
-- Do not label an account as empty before checking both:
-- `get_campaigns` with `status=ALL`
-- `get_insights` for a recent date range
+- Always state seed type (`keywords`, `url`, or both).
+- Treat returned keyword ideas as planning input, not guaranteed performance.

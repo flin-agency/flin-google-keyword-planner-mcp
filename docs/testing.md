@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide covers how to test `flin-google-ads-mcp` from zero to production confidence.
+This guide covers how to test `flin-google-keyword-planner-mcp`.
 
 ## Test levels
 
@@ -22,7 +22,7 @@ uv build
 
 What this validates:
 
-- query builders and config validation logic
+- tool registration and input normalization logic
 - Python syntax/import safety
 - package can be built into wheel and sdist
 
@@ -39,138 +39,47 @@ export GOOGLE_ADS_CUSTOMER_ID="1234567890"
 export GOOGLE_ADS_LOGIN_CUSTOMER_ID="1234567890"
 ```
 
-### 2.2 List tools (CLI mode)
+### 2.2 List tools
 
 ```bash
 npx -y @modelcontextprotocol/inspector --cli \
-  uv run flin-google-ads-mcp \
+  uv run flin-google-keyword-planner-mcp \
   --method tools/list
 ```
 
 Expected:
 
-- `health_check`
-- `list_accessible_customers`
-- `get_customer_clients`
-- `get_campaigns`
-- `get_ad_groups`
-- `get_ads`
-- `get_insights`
-- `get_keywords`
+- `keyword_research`
 
-Note: `ListAccessibleCustomers` itself ignores `login-customer-id` by Google Ads API design.
+### 2.3 Smoke test `keyword_research`
 
-### 2.3 Health check
+Keyword seed example:
 
 ```bash
 npx -y @modelcontextprotocol/inspector --cli \
-  uv run flin-google-ads-mcp \
+  uv run flin-google-keyword-planner-mcp \
   --method tools/call \
-  --tool-name health_check
-```
-
-Expected:
-
-- `"ok": true`
-- `"status": "ready"`
-
-### 2.4 Smoke test tool calls
-
-Accessible customers:
-
-```bash
-npx -y @modelcontextprotocol/inspector --cli \
-  uv run flin-google-ads-mcp \
-  --method tools/call \
-  --tool-name list_accessible_customers \
-  --tool-arg limit=10
-```
-
-Campaigns:
-
-```bash
-npx -y @modelcontextprotocol/inspector --cli \
-  uv run flin-google-ads-mcp \
-  --method tools/call \
-  --tool-name get_campaigns \
+  --tool-name keyword_research \
   --tool-arg customer_id=1234567890 \
-  --tool-arg login_customer_id=3943585717 \
-  --tool-arg status=ALL \
-  --tool-arg limit=10
-```
-
-Ads (with content):
-
-```bash
-npx -y @modelcontextprotocol/inspector --cli \
-  uv run flin-google-ads-mcp \
-  --method tools/call \
-  --tool-name get_ads \
-  --tool-arg customer_id=1234567890 \
-  --tool-arg login_customer_id=3943585717 \
-  --tool-arg status=ENABLED \
-  --tool-arg limit=10
-```
-
-Expected: `content.responsive_search_ad.headlines` and `content.responsive_search_ad.descriptions` are present for RSA ads.
-
-Customer clients under manager:
-
-```bash
-npx -y @modelcontextprotocol/inspector --cli \
-  uv run flin-google-ads-mcp \
-  --method tools/call \
-  --tool-name get_customer_clients \
-  --tool-arg customer_id=3943585717 \
-  --tool-arg login_customer_id=3943585717 \
-  --tool-arg direct_only=true \
-  --tool-arg include_hidden=false \
-  --tool-arg include_self=false \
+  --tool-arg login_customer_id=1234567890 \
+  --tool-arg 'keywords=["running shoes","trail shoes"]' \
+  --tool-arg language_id=1000 \
+  --tool-arg 'location_ids=["2840"]' \
+  --tool-arg network=GOOGLE_SEARCH_AND_PARTNERS \
   --tool-arg limit=20
 ```
 
-Insights:
+URL seed example:
 
 ```bash
 npx -y @modelcontextprotocol/inspector --cli \
-  uv run flin-google-ads-mcp \
+  uv run flin-google-keyword-planner-mcp \
   --method tools/call \
-  --tool-name get_insights \
+  --tool-name keyword_research \
   --tool-arg customer_id=1234567890 \
-  --tool-arg login_customer_id=3943585717 \
-  --tool-arg level=campaign \
-  --tool-arg date_range=LAST_MONTH \
-  --tool-arg limit=10
-```
-
-Insights with custom date range:
-
-```bash
-npx -y @modelcontextprotocol/inspector --cli \
-  uv run flin-google-ads-mcp \
-  --method tools/call \
-  --tool-name get_insights \
-  --tool-arg customer_id=1234567890 \
-  --tool-arg login_customer_id=3943585717 \
-  --tool-arg level=campaign \
-  --tool-arg date_range=CUSTOM \
-  --tool-arg start_date=2026-03-01 \
-  --tool-arg end_date=2026-03-20 \
-  --tool-arg limit=10
-```
-
-Keywords:
-
-```bash
-npx -y @modelcontextprotocol/inspector --cli \
-  uv run flin-google-ads-mcp \
-  --method tools/call \
-  --tool-name get_keywords \
-  --tool-arg customer_id=1234567890 \
-  --tool-arg login_customer_id=3943585717 \
-  --tool-arg date_range=LAST_90_DAYS \
-  --tool-arg status=ENABLED \
-  --tool-arg limit=25
+  --tool-arg login_customer_id=1234567890 \
+  --tool-arg url=https://example.com \
+  --tool-arg limit=20
 ```
 
 ## 3) End-to-end test in Claude (uvx)
@@ -180,9 +89,9 @@ Use this config:
 ```json
 {
   "mcpServers": {
-    "flin-google-ads-mcp": {
+    "flin-google-keyword-planner-mcp": {
       "command": "uvx",
-      "args": ["flin-google-ads-mcp@latest"],
+      "args": ["flin-google-keyword-planner-mcp@latest"],
       "env": {
         "GOOGLE_ADS_DEVELOPER_TOKEN": "xxx",
         "GOOGLE_ADS_CLIENT_ID": "xxx",
@@ -198,10 +107,8 @@ Use this config:
 
 Then ask Claude:
 
-1. `Run health_check`
-2. `List accessible customers`
-3. `Get campaigns for customer 1234567890 with limit 5`
-4. `Get campaign insights for last 30 days`
+1. `Run keyword research for ["running shoes"] with limit 10`
+2. `Run keyword research from url https://example.com`
 
 ## 4) Common failures and fixes
 
@@ -210,15 +117,15 @@ Then ask Claude:
 - One or more required env vars are missing.
 - Fix: compare with `.env.example`.
 
-`PERMISSION_DENIED`:
+`PERMISSION_DENIED` / `USER_PERMISSION_DENIED`:
 
 - OAuth user/token is valid but lacks account access or API permissions.
-- Fix: confirm account permissions and developer token access level.
+- Fix: confirm account permissions and `login_customer_id` pairing.
 
-`CUSTOMER_NOT_FOUND` or request errors:
+Seed validation error:
 
-- Wrong customer ID format or inaccessible account.
-- Fix: use 10-digit ID (no `-`) and verify with `list_accessible_customers`.
+- Both `keywords` and `url` are empty/missing.
+- Fix: pass at least one seed source.
 
 ## Recommended release gate
 
@@ -227,4 +134,4 @@ Before each release:
 1. `python3 -m pytest`
 2. `python3 -m compileall src`
 3. `uv build`
-4. Inspector smoke tests: `health_check`, `list_accessible_customers`, `get_customer_clients`, `get_campaigns`, `get_insights`, `get_keywords`
+4. Inspector smoke tests: `tools/list` and `keyword_research`
