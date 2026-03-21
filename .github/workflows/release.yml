@@ -12,8 +12,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     permissions:
       contents: read
     steps:
@@ -31,9 +29,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: false
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv
 
       - name: Validate tag version matches pyproject
         if: startsWith(github.ref, 'refs/tags/v')
@@ -71,18 +69,11 @@ jobs:
           python -m pip install twine
           twine check dist/*
 
-      - name: Upload dist artifacts
-        uses: actions/upload-artifact@v5
-        with:
-          name: dist
-          path: dist/*
-
   publish-pypi:
     name: Publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     environment:
       name: pypi
       url: https://pypi.org/p/flin-google-keyword-planner-mcp
@@ -90,11 +81,30 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - name: Download dist artifacts
-        uses: actions/download-artifact@v5
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
         with:
-          name: dist
-          path: dist
+          python-version: "3.12"
+
+      - name: Install uv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Build package
+        run: uv build
+
+      - name: Verify dist metadata
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install twine
+          twine check dist/*
 
       - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -103,20 +113,37 @@ jobs:
     name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     steps:
-      - name: Download dist artifacts
-        uses: actions/download-artifact@v5
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
         with:
-          name: dist
-          path: dist
+          python-version: "3.12"
+
+      - name: Install uv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Build package
+        run: uv build
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --generate-notes
+          fi
