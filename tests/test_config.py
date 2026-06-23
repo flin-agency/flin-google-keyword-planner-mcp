@@ -6,14 +6,13 @@ def test_missing_required_env_vars_detects_all_missing() -> None:
     assert "GOOGLE_ADS_DEVELOPER_TOKEN" in missing
     assert "GOOGLE_ADS_CLIENT_ID" in missing
     assert "GOOGLE_ADS_CLIENT_SECRET" in missing
-    assert "GOOGLE_ADS_REFRESH_TOKEN" in missing
+    assert "GOOGLE_ADS_REFRESH_TOKEN" not in missing
 
 
-def test_missing_required_env_vars_with_complete_env() -> None:
+def test_missing_required_env_vars_does_not_require_refresh_token() -> None:
     env = {
         "GOOGLE_ADS_DEVELOPER_TOKEN": "dev",
         "GOOGLE_ADS_CLIENT_ID": "cid",
         "GOOGLE_ADS_CLIENT_SECRET": "sec",
-        "GOOGLE_ADS_REFRESH_TOKEN": "rtok",
     }
     assert missing_required_env_vars(env=env) == []

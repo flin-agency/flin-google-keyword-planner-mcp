@@ -71,6 +71,8 @@ npx -y @modelcontextprotocol/inspector --cli \
 ```
 
 Expected tools:
+- `google_ads_authorization_url`
+- `google_ads_exchange_authorization_code`
 - `keyword_ideas_from_keywords`
 - `keyword_ideas_from_url`
 - `keyword_ideas_from_keyword_and_url`

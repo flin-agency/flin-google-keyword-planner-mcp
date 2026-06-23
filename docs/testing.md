@@ -35,7 +35,8 @@ What this validates:
 export GOOGLE_ADS_DEVELOPER_TOKEN="..."
 export GOOGLE_ADS_CLIENT_ID="..."
 export GOOGLE_ADS_CLIENT_SECRET="..."
-export GOOGLE_ADS_REFRESH_TOKEN="..."
+# Optional: export this for persistent auth, or generate it with the MCP OAuth tools.
+# export GOOGLE_ADS_REFRESH_TOKEN="..."
 export GOOGLE_ADS_CUSTOMER_ID="1234567890"
 export GOOGLE_ADS_LOGIN_CUSTOMER_ID="1234567890"
 ```
@@ -50,6 +51,8 @@ npx -y @modelcontextprotocol/inspector --cli \
 
 Expected tools:
 
+- `google_ads_authorization_url`
+- `google_ads_exchange_authorization_code`
 - `keyword_ideas_from_keywords`
 - `keyword_ideas_from_url`
 - `keyword_ideas_from_keyword_and_url`
@@ -143,7 +146,6 @@ Use this config:
         "GOOGLE_ADS_DEVELOPER_TOKEN": "xxx",
         "GOOGLE_ADS_CLIENT_ID": "xxx",
         "GOOGLE_ADS_CLIENT_SECRET": "xxx",
-        "GOOGLE_ADS_REFRESH_TOKEN": "xxx",
         "GOOGLE_ADS_CUSTOMER_ID": "1234567890",
         "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "1234567890"
       }
@@ -154,9 +156,14 @@ Use this config:
 
 Then ask Claude:
 
-1. `Run keyword_ideas_from_keywords with ["running shoes"] limit 10`
-2. `Run keyword_ideas_from_site with site_url https://example.com`
-3. `Run keyword_ideas_historical for ["running shoes"] from JANUARY 2025 to DECEMBER 2025`
+1. `Run google_ads_authorization_url`
+2. Open the returned URL, approve access, and copy the `code` query parameter from the redirected URL.
+3. `Run google_ads_exchange_authorization_code with code "..."`
+4. `Run keyword_ideas_from_keywords with ["running shoes"] limit 10`
+5. `Run keyword_ideas_from_site with site_url https://example.com`
+6. `Run keyword_ideas_historical for ["running shoes"] from JANUARY 2025 to DECEMBER 2025`
+
+If your OAuth client does not use `http://localhost:8080/`, pass the same `redirect_uri` value to `google_ads_authorization_url` and `google_ads_exchange_authorization_code`.
 
 ## 4) Common failures and fixes
 

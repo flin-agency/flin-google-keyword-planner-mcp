@@ -20,6 +20,8 @@ from flin_google_ads_mcp.server import mcp
 def test_server_exposes_expected_keyword_idea_tools() -> None:
     tools = asyncio.run(mcp.list_tools())
     assert [tool.name for tool in tools] == [
+        "google_ads_authorization_url",
+        "google_ads_exchange_authorization_code",
         "keyword_ideas_from_keywords",
         "keyword_ideas_from_url",
         "keyword_ideas_from_keyword_and_url",

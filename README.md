@@ -77,10 +77,10 @@ Historical option:
 - `GOOGLE_ADS_DEVELOPER_TOKEN`
 - `GOOGLE_ADS_CLIENT_ID`
 - `GOOGLE_ADS_CLIENT_SECRET`
-- `GOOGLE_ADS_REFRESH_TOKEN`
 
 Optional:
 
+- `GOOGLE_ADS_REFRESH_TOKEN` (only needed if you want a persistent token instead of generating one in Claude)
 - `GOOGLE_ADS_LOGIN_CUSTOMER_ID`
 - `GOOGLE_ADS_CUSTOMER_ID` (default customer if no `customer_id` argument is passed)
 - `GOOGLE_ADS_USE_PROTO_PLUS` (`true` by default)
@@ -108,7 +108,6 @@ uv run flin-google-keyword-planner-mcp
         "GOOGLE_ADS_DEVELOPER_TOKEN": "REPLACE_ME",
         "GOOGLE_ADS_CLIENT_ID": "REPLACE_ME",
         "GOOGLE_ADS_CLIENT_SECRET": "REPLACE_ME",
-        "GOOGLE_ADS_REFRESH_TOKEN": "REPLACE_ME",
         "GOOGLE_ADS_CUSTOMER_ID": "1234567890",
         "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "1234567890",
         "GOOGLE_ADS_USE_PROTO_PLUS": "true"
@@ -135,7 +134,6 @@ uv run flin-google-keyword-planner-mcp
         "GOOGLE_ADS_DEVELOPER_TOKEN": "REPLACE_ME",
         "GOOGLE_ADS_CLIENT_ID": "REPLACE_ME",
         "GOOGLE_ADS_CLIENT_SECRET": "REPLACE_ME",
-        "GOOGLE_ADS_REFRESH_TOKEN": "REPLACE_ME",
         "GOOGLE_ADS_CUSTOMER_ID": "1234567890",
         "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "1234567890",
         "GOOGLE_ADS_USE_PROTO_PLUS": "true"
@@ -146,6 +144,19 @@ uv run flin-google-keyword-planner-mcp
 ```
 
 Restart Claude Desktop after config changes.
+
+### Generate the refresh token in Claude
+
+After Claude has loaded the MCP, ask it to run:
+
+1. `google_ads_authorization_url`
+2. Open the returned `authorization_url` in your browser and approve Google Ads access.
+3. Copy the `code` query parameter from the redirected URL.
+4. Run `google_ads_exchange_authorization_code` with that code.
+
+The default redirect URI is `http://localhost:8080/`. If your Google OAuth client uses a different redirect URI, pass the same `redirect_uri` value to both MCP tools.
+
+The exchanged refresh token is kept in the running MCP session, so the keyword tools can use it without adding `GOOGLE_ADS_REFRESH_TOKEN` to Claude config. To avoid regenerating it after every MCP restart, store it outside Claude config as `GOOGLE_ADS_REFRESH_TOKEN`.
 
 ## Security
 

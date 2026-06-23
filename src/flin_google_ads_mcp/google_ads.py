@@ -5,6 +5,7 @@ from functools import lru_cache
 from typing import Any
 import re
 
+from .auth import get_effective_refresh_token, get_refresh_token_cache_version
 from .config import ConfigurationError, Settings, load_settings
 
 
@@ -199,8 +200,15 @@ def clamp_limit(limit: int, *, default: int = 50, max_limit: int = 1000) -> int:
     return min(limit, max_limit)
 
 
-@lru_cache(maxsize=16)
 def get_google_ads_client(login_customer_id: str | None = None) -> Any:
+    return _get_google_ads_client(login_customer_id, get_refresh_token_cache_version())
+
+
+@lru_cache(maxsize=16)
+def _get_google_ads_client(
+    login_customer_id: str | None = None,
+    _refresh_token_version: int = 0,
+) -> Any:
     settings = load_settings()
 
     try:
@@ -214,7 +222,7 @@ def get_google_ads_client(login_customer_id: str | None = None) -> Any:
         "developer_token": settings.developer_token,
         "client_id": settings.client_id,
         "client_secret": settings.client_secret,
-        "refresh_token": settings.refresh_token,
+        "refresh_token": get_effective_refresh_token(settings),
         "use_proto_plus": settings.use_proto_plus,
     }
 
@@ -225,6 +233,10 @@ def get_google_ads_client(login_customer_id: str | None = None) -> Any:
         )
 
     return GoogleAdsClient.load_from_dict(config_dict)
+
+
+def clear_google_ads_client_cache() -> None:
+    _get_google_ads_client.cache_clear()
 
 
 def enum_name(value: Any) -> str:

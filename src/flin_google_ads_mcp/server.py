@@ -4,6 +4,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from .auth import DEFAULT_REDIRECT_URI, build_authorization_url, exchange_authorization_code
 from .config import ConfigurationError, load_settings
 from .google_ads import (
     format_google_ads_error,
@@ -16,7 +17,7 @@ mcp = FastMCP(
     name="flin-google-keyword-planner-mcp",
     instructions=(
         "Google Ads Keyword Planner MCP. "
-        "Five specialized read-only keyword ideas tools are exposed."
+        "OAuth setup helpers and five specialized read-only keyword ideas tools are exposed."
     ),
 )
 
@@ -47,6 +48,59 @@ def _run_keyword_ideas_tool(
             "ok": True,
             "customer_id": resolved_customer_id,
             **result,
+        }
+    except Exception as exc:
+        return _error_payload(exc)
+
+
+@mcp.tool()
+def google_ads_authorization_url(
+    redirect_uri: str = DEFAULT_REDIRECT_URI,
+    state: str | None = None,
+) -> dict[str, Any]:
+    """Create the Google OAuth consent URL for generating a Google Ads refresh token."""
+    try:
+        settings = load_settings()
+        authorization_url = build_authorization_url(
+            client_id=settings.client_id,
+            redirect_uri=redirect_uri,
+            state=state,
+        )
+        return {
+            "ok": True,
+            "authorization_url": authorization_url,
+            "redirect_uri": redirect_uri,
+            "next_step": (
+                "Open authorization_url, approve access, then copy the code query "
+                "parameter from the redirected URL into google_ads_exchange_authorization_code."
+            ),
+        }
+    except Exception as exc:
+        return _error_payload(exc)
+
+
+@mcp.tool()
+def google_ads_exchange_authorization_code(
+    code: str,
+    redirect_uri: str = DEFAULT_REDIRECT_URI,
+) -> dict[str, Any]:
+    """Exchange a Google OAuth authorization code for a session refresh token."""
+    try:
+        settings = load_settings()
+        refresh_token = exchange_authorization_code(
+            code=code,
+            client_id=settings.client_id,
+            client_secret=settings.client_secret,
+            redirect_uri=redirect_uri,
+        )
+        return {
+            "ok": True,
+            "refresh_token": refresh_token,
+            "token_source": "runtime_session",
+            "next_step": (
+                "The token is active for this MCP server session. For persistence, "
+                "store it as GOOGLE_ADS_REFRESH_TOKEN outside Claude config."
+            ),
         }
     except Exception as exc:
         return _error_payload(exc)
