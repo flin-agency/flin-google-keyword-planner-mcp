@@ -53,6 +53,8 @@ Expected tools:
 
 - `google_ads_authorization_url`
 - `google_ads_exchange_authorization_code`
+- `google_ads_start_local_oauth_flow`
+- `google_ads_oauth_status`
 - `keyword_ideas_from_keywords`
 - `keyword_ideas_from_url`
 - `keyword_ideas_from_keyword_and_url`
@@ -156,14 +158,14 @@ Use this config:
 
 Then ask Claude:
 
-1. `Run google_ads_authorization_url`
-2. Open the returned URL, approve access, and copy the `code` query parameter from the redirected URL.
-3. `Run google_ads_exchange_authorization_code with code "..."`
+1. `Run google_ads_start_local_oauth_flow`
+2. Open the returned URL and approve access.
+3. After the browser shows the local completion page, `Run google_ads_oauth_status`.
 4. `Run keyword_ideas_from_keywords with ["running shoes"] limit 10`
 5. `Run keyword_ideas_from_site with site_url https://example.com`
 6. `Run keyword_ideas_historical for ["running shoes"] from JANUARY 2025 to DECEMBER 2025`
 
-If your OAuth client does not use `http://localhost:8080/`, pass the same `redirect_uri` value to `google_ads_authorization_url` and `google_ads_exchange_authorization_code`.
+If your OAuth client does not use `http://localhost:8080/`, pass its loopback redirect URI to `google_ads_start_local_oauth_flow`. As a fallback, `google_ads_exchange_authorization_code` accepts either the raw code or the full redirected URL.
 
 ## 4) Common failures and fixes
 

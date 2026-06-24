@@ -4,7 +4,13 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from .auth import DEFAULT_REDIRECT_URI, build_authorization_url, exchange_authorization_code
+from .auth import (
+    DEFAULT_REDIRECT_URI,
+    build_authorization_url,
+    exchange_authorization_code,
+    get_local_authorization_flow_status,
+    start_local_authorization_flow,
+)
 from .config import ConfigurationError, load_settings
 from .google_ads import (
     format_google_ads_error,
@@ -101,6 +107,41 @@ def google_ads_exchange_authorization_code(
                 "The token is active for this MCP server session. For persistence, "
                 "store it as GOOGLE_ADS_REFRESH_TOKEN outside Claude config."
             ),
+        }
+    except Exception as exc:
+        return _error_payload(exc)
+
+
+@mcp.tool()
+def google_ads_start_local_oauth_flow(
+    redirect_uri: str = DEFAULT_REDIRECT_URI,
+) -> dict[str, Any]:
+    """Start a local OAuth callback server and return the Google consent URL."""
+    try:
+        settings = load_settings()
+        flow = start_local_authorization_flow(
+            settings=settings,
+            redirect_uri=redirect_uri,
+        )
+        return {
+            "ok": True,
+            **flow,
+            "next_step": (
+                "Open authorization_url in your browser. After Google redirects back "
+                "to the local callback, run google_ads_oauth_status."
+            ),
+        }
+    except Exception as exc:
+        return _error_payload(exc)
+
+
+@mcp.tool()
+def google_ads_oauth_status() -> dict[str, Any]:
+    """Return local OAuth callback status and whether a runtime token is available."""
+    try:
+        return {
+            "ok": True,
+            **get_local_authorization_flow_status(),
         }
     except Exception as exc:
         return _error_payload(exc)

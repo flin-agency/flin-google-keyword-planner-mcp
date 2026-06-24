@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from types import ModuleType
+from urllib.request import urlopen
 from urllib.parse import parse_qs, urlparse
 import sys
+import time
 
 import pytest
 
@@ -12,7 +14,9 @@ from flin_google_ads_mcp.auth import (
     build_authorization_url,
     clear_runtime_refresh_token,
     exchange_authorization_code,
+    get_local_authorization_flow_status,
     get_effective_refresh_token,
+    start_local_authorization_flow,
 )
 from flin_google_ads_mcp.config import ConfigurationError, Settings
 
@@ -72,6 +76,24 @@ def test_exchange_authorization_code_stores_runtime_refresh_token() -> None:
 
     assert token == "runtime-refresh-token"
     assert get_effective_refresh_token(_settings()) == "runtime-refresh-token"
+
+
+def test_exchange_authorization_code_accepts_full_redirect_url() -> None:
+    clear_runtime_refresh_token()
+
+    def fake_token_request(payload: dict[str, str]) -> dict[str, str]:
+        assert payload["code"] == "auth-code"
+        return {"refresh_token": "runtime-refresh-token"}
+
+    token = exchange_authorization_code(
+        code="http://localhost:8080/?state=csrf-token&code=auth-code&scope=adwords",
+        client_id="client-id",
+        client_secret="client-secret",
+        redirect_uri="http://localhost:8080/",
+        token_request=fake_token_request,
+    )
+
+    assert token == "runtime-refresh-token"
 
 
 def test_get_effective_refresh_token_prefers_runtime_token() -> None:
@@ -138,3 +160,39 @@ def test_google_ads_client_uses_regenerated_runtime_refresh_token(monkeypatch) -
         "first-token",
         "second-token",
     ]
+
+
+def test_start_local_authorization_flow_exchanges_callback_code() -> None:
+    clear_runtime_refresh_token()
+
+    def fake_token_request(payload: dict[str, str]) -> dict[str, str]:
+        assert payload["code"] == "callback-code"
+        return {"refresh_token": "callback-refresh-token"}
+
+    flow = start_local_authorization_flow(
+        settings=_settings(),
+        redirect_uri="http://127.0.0.1:0/",
+        token_request=fake_token_request,
+    )
+    parsed_auth_url = urlparse(flow["authorization_url"])
+    auth_params = parse_qs(parsed_auth_url.query)
+
+    callback_url = (
+        f"{flow['redirect_uri']}?state={auth_params['state'][0]}&code=callback-code"
+    )
+    with urlopen(callback_url, timeout=5) as response:
+        body = response.read().decode("utf-8")
+
+    assert response.status == 200
+    assert "Authentication complete" in body
+
+    status = {}
+    for _ in range(20):
+        status = get_local_authorization_flow_status()
+        if status["status"] == "complete":
+            break
+        time.sleep(0.05)
+
+    assert status["status"] == "complete"
+    assert status["token_available"] is True
+    assert get_effective_refresh_token(_settings()) == "callback-refresh-token"

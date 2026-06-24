@@ -149,12 +149,19 @@ Restart Claude Desktop after config changes.
 
 After Claude has loaded the MCP, ask it to run:
 
-1. `google_ads_authorization_url`
+1. `google_ads_start_local_oauth_flow`
 2. Open the returned `authorization_url` in your browser and approve Google Ads access.
-3. Copy the `code` query parameter from the redirected URL.
-4. Run `google_ads_exchange_authorization_code` with that code.
+3. After the browser shows the local completion page, run `google_ads_oauth_status`.
+4. Run the keyword tools once `token_available` is `true`.
 
-The default redirect URI is `http://localhost:8080/`. If your Google OAuth client uses a different redirect URI, pass the same `redirect_uri` value to both MCP tools.
+The default redirect URI is `http://localhost:8080/`. If your Google OAuth client uses a different loopback redirect URI, pass it to `google_ads_start_local_oauth_flow`.
+
+If you cannot use the local callback flow, use the manual fallback:
+
+1. Run `google_ads_authorization_url`.
+2. Open the returned URL and approve access.
+3. Copy either the full redirected URL or the `code` query parameter.
+4. Run `google_ads_exchange_authorization_code` with that value.
 
 The exchanged refresh token is kept in the running MCP session, so the keyword tools can use it without adding `GOOGLE_ADS_REFRESH_TOKEN` to Claude config. To avoid regenerating it after every MCP restart, store it outside Claude config as `GOOGLE_ADS_REFRESH_TOKEN`.
 
