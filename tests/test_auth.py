@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import ModuleType
 from urllib.request import urlopen
 from urllib.parse import parse_qs, urlparse
+import json
 import sys
 import time
 
@@ -31,6 +32,14 @@ def _settings(refresh_token: str | None = None) -> Settings:
         default_customer_id=None,
         use_proto_plus=True,
     )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_token_file(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    monkeypatch.setenv("FLIN_GOOGLE_ADS_TOKEN_FILE", str(tmp_path / "oauth-token.json"))
+    clear_runtime_refresh_token()
+    yield
+    clear_runtime_refresh_token()
 
 
 def test_build_authorization_url_requests_offline_google_ads_access() -> None:
@@ -76,6 +85,65 @@ def test_exchange_authorization_code_stores_runtime_refresh_token() -> None:
 
     assert token == "runtime-refresh-token"
     assert get_effective_refresh_token(_settings()) == "runtime-refresh-token"
+
+
+def test_exchange_authorization_code_persists_refresh_token(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    token_file = tmp_path / "oauth-token.json"
+    monkeypatch.setenv("FLIN_GOOGLE_ADS_TOKEN_FILE", str(token_file))
+    clear_runtime_refresh_token()
+
+    exchange_authorization_code(
+        code="auth-code",
+        client_id="client-id",
+        client_secret="client-secret",
+        redirect_uri="http://localhost:8080/",
+        token_request=lambda _payload: {"refresh_token": "persisted-refresh-token"},
+    )
+    clear_runtime_refresh_token()
+
+    assert get_effective_refresh_token(_settings()) == "persisted-refresh-token"
+    assert json.loads(token_file.read_text(encoding="utf-8")) == {
+        "refresh_token": "persisted-refresh-token"
+    }
+
+
+def test_persisted_refresh_token_takes_precedence_over_env_token(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    token_file = tmp_path / "oauth-token.json"
+    monkeypatch.setenv("FLIN_GOOGLE_ADS_TOKEN_FILE", str(token_file))
+    token_file.write_text(
+        json.dumps({"refresh_token": "persisted-refresh-token"}),
+        encoding="utf-8",
+    )
+    clear_runtime_refresh_token()
+
+    assert get_effective_refresh_token(_settings("expired-env-token")) == (
+        "persisted-refresh-token"
+    )
+
+
+def test_local_authorization_status_reports_persisted_token(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    token_file = tmp_path / "oauth-token.json"
+    monkeypatch.setenv("FLIN_GOOGLE_ADS_TOKEN_FILE", str(token_file))
+    token_file.write_text(
+        json.dumps({"refresh_token": "persisted-refresh-token"}),
+        encoding="utf-8",
+    )
+    clear_runtime_refresh_token()
+
+    status = get_local_authorization_flow_status()
+
+    assert status["status"] == "not_started"
+    assert status["token_available"] is True
+    assert status["token_source"] == "file"
 
 
 def test_exchange_authorization_code_accepts_full_redirect_url() -> None:

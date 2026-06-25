@@ -167,6 +167,8 @@ Then ask Claude:
 
 If your OAuth client does not use `http://localhost:8080/`, pass its loopback redirect URI to `google_ads_start_local_oauth_flow`. As a fallback, `google_ads_exchange_authorization_code` accepts either the raw code or the full redirected URL.
 
+Generated refresh tokens are persisted outside Claude config in `~/.config/flin-google-keyword-planner-mcp/oauth-token.json`; set `FLIN_GOOGLE_ADS_TOKEN_FILE` to override that path.
+
 ## 4) Common failures and fixes
 
 `missing_configuration`:

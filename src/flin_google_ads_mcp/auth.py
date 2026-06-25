@@ -3,11 +3,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
 import json
+import os
 import secrets
 import threading
 
@@ -18,6 +20,10 @@ GOOGLE_ADS_SCOPE = "https://www.googleapis.com/auth/adwords"
 GOOGLE_OAUTH_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 DEFAULT_REDIRECT_URI = "http://localhost:8080/"
+TOKEN_FILE_ENV_VAR = "FLIN_GOOGLE_ADS_TOKEN_FILE"
+DEFAULT_TOKEN_FILE = (
+    Path.home() / ".config" / "flin-google-keyword-planner-mcp" / "oauth-token.json"
+)
 
 _runtime_refresh_token: str | None = None
 _runtime_refresh_token_version = 0
@@ -71,8 +77,45 @@ def set_runtime_refresh_token(refresh_token: str) -> str:
 
     global _runtime_refresh_token, _runtime_refresh_token_version
     _runtime_refresh_token = token
+    persist_refresh_token(token)
     _runtime_refresh_token_version += 1
     return token
+
+
+def get_token_file_path() -> Path:
+    configured_path = os.getenv(TOKEN_FILE_ENV_VAR)
+    if configured_path:
+        return Path(configured_path).expanduser()
+    return DEFAULT_TOKEN_FILE
+
+
+def load_persisted_refresh_token() -> str | None:
+    token_file = get_token_file_path()
+    if not token_file.exists():
+        return None
+
+    try:
+        payload = json.loads(token_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    refresh_token = payload.get("refresh_token")
+    if isinstance(refresh_token, str) and refresh_token.strip():
+        return refresh_token.strip()
+    return None
+
+
+def persist_refresh_token(refresh_token: str) -> None:
+    token_file = get_token_file_path()
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token_file.write_text(
+        json.dumps({"refresh_token": refresh_token}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    try:
+        token_file.chmod(0o600)
+    except OSError:
+        pass
 
 
 def extract_authorization_code(code_or_url: str) -> str:
@@ -103,6 +146,9 @@ def get_refresh_token_cache_version() -> int:
 def get_effective_refresh_token(settings: Settings) -> str:
     if _runtime_refresh_token:
         return _runtime_refresh_token
+    persisted_refresh_token = load_persisted_refresh_token()
+    if persisted_refresh_token:
+        return persisted_refresh_token
     if settings.refresh_token:
         return settings.refresh_token
     raise ConfigurationError(
@@ -110,6 +156,16 @@ def get_effective_refresh_token(settings: Settings) -> str:
         "google_ads_authorization_url and google_ads_exchange_authorization_code, "
         "or set GOOGLE_ADS_REFRESH_TOKEN."
     )
+
+
+def get_refresh_token_source() -> str | None:
+    if _runtime_refresh_token:
+        return "runtime"
+    if load_persisted_refresh_token():
+        return "file"
+    if os.getenv("GOOGLE_ADS_REFRESH_TOKEN"):
+        return "env"
+    return None
 
 
 def _request_google_token(payload: dict[str, str]) -> Mapping[str, Any]:
@@ -282,16 +338,19 @@ def start_local_authorization_flow(
 
 
 def get_local_authorization_flow_status() -> dict[str, Any]:
+    token_source = get_refresh_token_source()
     if _local_flow is None:
         return {
             "status": "not_started",
-            "token_available": bool(_runtime_refresh_token),
+            "token_available": token_source is not None,
+            "token_source": token_source,
             "error": None,
         }
 
     return {
         "status": _local_flow.status,
-        "token_available": _local_flow.token_available or bool(_runtime_refresh_token),
+        "token_available": _local_flow.token_available or token_source is not None,
+        "token_source": token_source,
         "error": _local_flow.error,
         "redirect_uri": _local_flow.redirect_uri,
     }

@@ -163,7 +163,7 @@ If you cannot use the local callback flow, use the manual fallback:
 3. Copy either the full redirected URL or the `code` query parameter.
 4. Run `google_ads_exchange_authorization_code` with that value.
 
-The exchanged refresh token is kept in the running MCP session, so the keyword tools can use it without adding `GOOGLE_ADS_REFRESH_TOKEN` to Claude config. To avoid regenerating it after every MCP restart, store it outside Claude config as `GOOGLE_ADS_REFRESH_TOKEN`.
+The exchanged refresh token is stored outside Claude config in `~/.config/flin-google-keyword-planner-mcp/oauth-token.json` and reused after MCP restarts. Override the storage path with `FLIN_GOOGLE_ADS_TOKEN_FILE` if needed.
 
 ## Security
 
