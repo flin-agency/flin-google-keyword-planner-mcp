@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from .auth import (
     DEFAULT_REDIRECT_URI,
@@ -14,16 +15,18 @@ from .auth import (
 from .config import ConfigurationError, load_settings
 from .google_ads import (
     format_google_ads_error,
+    generate_keyword_historical_metrics,
     generate_keyword_ideas,
     resolve_customer_id,
 )
-
 
 mcp = FastMCP(
     name="flin-google-keyword-planner-mcp",
     instructions=(
         "Google Ads Keyword Planner MCP. "
-        "OAuth setup helpers and five specialized read-only keyword ideas tools are exposed."
+        "OAuth setup helpers, five keyword ideas tools, and historical metrics for existing keywords. "
+        "Competition is advertising competition, not organic SEO difficulty. Missing metrics are null. "
+        "Defaults are English and US; explicitly set targeting for other markets."
     ),
 )
 
@@ -90,10 +93,10 @@ def google_ads_exchange_authorization_code(
     code: str,
     redirect_uri: str = DEFAULT_REDIRECT_URI,
 ) -> dict[str, Any]:
-    """Exchange a Google OAuth authorization code for a session refresh token."""
+    """Exchange and securely persist an OAuth code without exposing tokens in chat."""
     try:
         settings = load_settings()
-        refresh_token = exchange_authorization_code(
+        exchange_authorization_code(
             code=code,
             client_id=settings.client_id,
             client_secret=settings.client_secret,
@@ -101,11 +104,12 @@ def google_ads_exchange_authorization_code(
         )
         return {
             "ok": True,
-            "refresh_token": refresh_token,
-            "token_source": "runtime_session",
+            "token_available": True,
+            "token_source": "runtime",
+            "persisted": True,
             "next_step": (
-                "The token is active for this MCP server session. For persistence, "
-                "store it as GOOGLE_ADS_REFRESH_TOKEN outside Claude config."
+                "Authentication is active and securely persisted for future MCP sessions. "
+                "You can now run the keyword tools."
             ),
         }
     except Exception as exc:
@@ -147,7 +151,11 @@ def google_ads_oauth_status() -> dict[str, Any]:
         return _error_payload(exc)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, openWorldHint=True
+    )
+)
 def keyword_ideas_from_keywords(
     keywords: list[str],
     customer_id: str | None = None,
@@ -160,6 +168,7 @@ def keyword_ideas_from_keywords(
     keyword_annotation: list[str] | None = None,
     aggregate_metric_types: list[str] | None = None,
     login_customer_id: str | None = None,
+    include_average_cpc: bool = False,
 ) -> dict[str, Any]:
     """Generate keyword ideas using KeywordSeed."""
     return _run_keyword_ideas_tool(
@@ -175,10 +184,15 @@ def keyword_ideas_from_keywords(
         page_token=page_token,
         keyword_annotation=keyword_annotation,
         aggregate_metric_types=aggregate_metric_types,
+        include_average_cpc=include_average_cpc,
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, openWorldHint=True
+    )
+)
 def keyword_ideas_from_url(
     url: str,
     customer_id: str | None = None,
@@ -191,6 +205,7 @@ def keyword_ideas_from_url(
     keyword_annotation: list[str] | None = None,
     aggregate_metric_types: list[str] | None = None,
     login_customer_id: str | None = None,
+    include_average_cpc: bool = False,
 ) -> dict[str, Any]:
     """Generate keyword ideas using UrlSeed."""
     return _run_keyword_ideas_tool(
@@ -206,10 +221,15 @@ def keyword_ideas_from_url(
         page_token=page_token,
         keyword_annotation=keyword_annotation,
         aggregate_metric_types=aggregate_metric_types,
+        include_average_cpc=include_average_cpc,
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, openWorldHint=True
+    )
+)
 def keyword_ideas_from_keyword_and_url(
     keywords: list[str],
     url: str,
@@ -223,6 +243,7 @@ def keyword_ideas_from_keyword_and_url(
     keyword_annotation: list[str] | None = None,
     aggregate_metric_types: list[str] | None = None,
     login_customer_id: str | None = None,
+    include_average_cpc: bool = False,
 ) -> dict[str, Any]:
     """Generate keyword ideas using KeywordAndUrlSeed."""
     return _run_keyword_ideas_tool(
@@ -239,10 +260,15 @@ def keyword_ideas_from_keyword_and_url(
         page_token=page_token,
         keyword_annotation=keyword_annotation,
         aggregate_metric_types=aggregate_metric_types,
+        include_average_cpc=include_average_cpc,
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, openWorldHint=True
+    )
+)
 def keyword_ideas_from_site(
     site_url: str,
     customer_id: str | None = None,
@@ -255,6 +281,7 @@ def keyword_ideas_from_site(
     keyword_annotation: list[str] | None = None,
     aggregate_metric_types: list[str] | None = None,
     login_customer_id: str | None = None,
+    include_average_cpc: bool = False,
 ) -> dict[str, Any]:
     """Generate keyword ideas using SiteSeed."""
     return _run_keyword_ideas_tool(
@@ -270,10 +297,15 @@ def keyword_ideas_from_site(
         page_token=page_token,
         keyword_annotation=keyword_annotation,
         aggregate_metric_types=aggregate_metric_types,
+        include_average_cpc=include_average_cpc,
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, openWorldHint=True
+    )
+)
 def keyword_ideas_historical(
     keywords: list[str],
     start_year: int,
@@ -312,6 +344,52 @@ def keyword_ideas_historical(
         keyword_annotation=keyword_annotation,
         aggregate_metric_types=aggregate_metric_types,
     )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, openWorldHint=True
+    )
+)
+def keyword_historical_metrics(
+    keywords: list[str],
+    customer_id: str | None = None,
+    language_id: str = "1000",
+    location_ids: list[str] | None = None,
+    network: str = "GOOGLE_SEARCH_AND_PARTNERS",
+    include_adult_keywords: bool = False,
+    start_year: int | None = None,
+    start_month: str | int | None = None,
+    end_year: int | None = None,
+    end_month: str | int | None = None,
+    include_average_cpc: bool = False,
+    login_customer_id: str | None = None,
+) -> dict[str, Any]:
+    """Get historical volumes and bids for up to 10,000 supplied keywords, without new ideas.
+
+    Google may combine close variants. Omit dates for the default past 12 months;
+    otherwise supply all four date fields. Unmatched keywords are not assumed zero.
+    Defaults: English, US, Search and Partners. Use location_ids=[] for all locations.
+    """
+    try:
+        resolved_customer_id = resolve_customer_id(customer_id, load_settings())
+        result = generate_keyword_historical_metrics(
+            customer_id=resolved_customer_id,
+            keywords=keywords,
+            language_id=language_id,
+            location_ids=location_ids,
+            network=network,
+            include_adult_keywords=include_adult_keywords,
+            start_year=start_year,
+            start_month=start_month,
+            end_year=end_year,
+            end_month=end_month,
+            include_average_cpc=include_average_cpc,
+            login_customer_id=login_customer_id,
+        )
+        return {"ok": True, "customer_id": resolved_customer_id, **result}
+    except Exception as exc:
+        return _error_payload(exc)
 
 
 def main() -> None:

@@ -14,9 +14,9 @@ This guide covers how to test `flin-google-keyword-planner-mcp`.
 Run these first on every change:
 
 ```bash
-uv sync --extra dev
-python3 -m pytest
-python3 -m compileall src
+uv sync --locked --extra dev
+uv run --locked python -m pytest
+uv run --locked python -m compileall src
 uv build
 ```
 
@@ -24,6 +24,10 @@ What this validates:
 
 - MCP tool registration contract
 - input normalization and validation logic
+- real Google Ads v26 request/response messages in both protobuf modes
+- short/empty page continuation and nullable metrics
+- exact historical metrics, variants, and input limits
+- OAuth PKCE, state rejection, port reuse, expiry, and private token persistence
 - Python syntax/import safety
 - package can be built into wheel and sdist
 
@@ -60,6 +64,7 @@ Expected tools:
 - `keyword_ideas_from_keyword_and_url`
 - `keyword_ideas_from_site`
 - `keyword_ideas_historical`
+- `keyword_historical_metrics`
 
 ### 2.3 Smoke tests per tool
 
@@ -195,7 +200,18 @@ Historical range errors:
 
 Before each release:
 
-1. `python3 -m pytest`
-2. `python3 -m compileall src`
+1. `uv run --locked python -m pytest`
+2. `uv run --locked python -m compileall src`
 3. `uv build`
-4. Inspector smoke tests: `tools/list` + all 5 tool calls
+4. Inspector smoke tests: `tools/list` + all 6 keyword tool calls
+
+## Exact historical metrics smoke test
+
+Call `keyword_historical_metrics` with `keywords=["wandern schweiz"]`,
+`language_id="1001"`, `location_ids=["2756"]`, and `network="GOOGLE_SEARCH"`.
+Check returned targeting, null values, close variants, and unmatched terms.
+This tool does not accept pagination or generate additional ideas.
+
+The OAuth tests bind only to loopback and use fake credentials. They require
+permission to open a local listening socket, but do not contact Google.
+CI runs the suite on Python 3.10, 3.13, and 3.14.

@@ -16,3 +16,9 @@ def test_missing_required_env_vars_does_not_require_refresh_token() -> None:
         "GOOGLE_ADS_CLIENT_SECRET": "sec",
     }
     assert missing_required_env_vars(env=env) == []
+
+
+def test_whitespace_credentials_are_missing():
+    assert "GOOGLE_ADS_CLIENT_ID" in missing_required_env_vars(
+        {"GOOGLE_ADS_CLIENT_ID": "  "}
+    )

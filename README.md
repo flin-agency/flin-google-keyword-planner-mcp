@@ -11,6 +11,7 @@ This server exposes focused read-only tools so an LLM can clearly choose the rig
 - `keyword_ideas_from_keyword_and_url`
 - `keyword_ideas_from_site`
 - `keyword_ideas_historical`
+- `keyword_historical_metrics`
 
 ## Tool overview
 
@@ -57,18 +58,52 @@ Required:
 Historical option:
 - `include_average_cpc` (default `false`)
 
-## Common optional parameters (all tools)
+## Common optional parameters (keyword idea tools)
 
 - `customer_id`
 - `language_id` (default `1000`)
-- `location_ids` (default `2840` = US)
-- `network` (`GOOGLE_SEARCH` or `GOOGLE_SEARCH_AND_PARTNERS`)
+- `location_ids` (default `2840` = US; `[]` = all locations; max 10 unique IDs)
+- `network` (`GOOGLE_SEARCH` or `GOOGLE_SEARCH_AND_PARTNERS`; default includes partners)
 - `include_adult_keywords` (default `false`)
-- `limit` (default `50`, max `1000`)
+- `limit` (page size: default `50`, max `1000`; Google may return fewer rows)
+- `include_average_cpc` (default `false`; also available on all four seed tools)
 - `page_token`
 - `keyword_annotation` (currently: `KEYWORD_CONCEPT`)
 - `aggregate_metric_types` (currently: `DEVICE`)
 - `login_customer_id`
+
+### 6) `keyword_historical_metrics`
+
+Fetch historical search volumes and bids for an existing list of up to 10,000
+keywords using Google's `GenerateKeywordHistoricalMetrics` endpoint. It does not
+expand the list into new ideas. `keyword_ideas_historical` keeps its original
+behavior: discovering ideas with a historical date range.
+
+Required: `keywords`. Optional: customer, language, locations, network, adult
+keywords, manager ID, and `include_average_cpc`. Omit dates for Google's default
+past 12 months, or supply all four year/month fields. Google controls historical
+data availability and may omit unavailable months.
+
+Results include close variants and `unmatched_keywords`. Google can combine similar
+keywords, so the result count need not match the input count; an unmatched term is
+not evidence of zero search volume. Pagination and idea annotations do not apply.
+
+## Data interpretation and targeting
+
+- Defaults remain **English / US / Search and Partners** for compatibility. For
+  German Switzerland, explicitly pass `language_id="1001"`, `location_ids=["2756"]`.
+  Use `network="GOOGLE_SEARCH"` for Google Search alone.
+- Responses echo their targeting. Bid amounts and CPC use the Google Ads customer
+  account's currency; do not assume USD or CHF from the target location.
+- Missing optional metrics are `null`; genuine reported zeroes remain `0`.
+- Competition and competition index measure **advertiser competition**, not SEO difficulty.
+- Search volumes are approximate and may group close variants.
+- Idea seeds accept at most 20 unique keywords. URL seeds require absolute HTTP(S) URLs.
+- Each ideas call returns one API page. Continue with `next_page_token` and identical
+  request parameters. A short or empty page does not imply the end if a token exists.
+- Requests use a 30-second RPC timeout and a 45-second retry window for transient
+  transport errors. The last in-flight RPC may extend beyond that window. Quota and
+  authentication errors are not automatically retried.
 
 ## Requirements
 
@@ -88,10 +123,10 @@ Optional:
 ## Quickstart (local)
 
 ```bash
-uv sync --extra dev
+uv sync --locked --extra dev
 cp .env.example .env
 # Fill .env with real credentials
-uv run flin-google-keyword-planner-mcp
+uv run --env-file .env flin-google-keyword-planner-mcp
 ```
 
 ## Claude integration
@@ -176,9 +211,9 @@ The exchanged refresh token is stored outside Claude config in `~/.config/flin-g
 ## Testing
 
 ```bash
-uv sync --extra dev
-python3 -m pytest
-python3 -m compileall src
+uv sync --locked --extra dev
+uv run --locked python -m pytest
+uv run --locked python -m compileall src
 uv build
 ```
 
@@ -205,8 +240,8 @@ In the PyPI project `flin-google-keyword-planner-mcp`, add a Trusted Publisher:
 ```bash
 # 1) bump version in pyproject.toml + src/flin_google_ads_mcp/__init__.py
 # 2) run checks
-python3 -m pytest
-python3 -m compileall src
+uv run --locked python -m pytest
+uv run --locked python -m compileall src
 uv build
 
 # 3) release
@@ -215,3 +250,22 @@ git commit -m "release: vX.Y.Z"
 git tag vX.Y.Z
 git push origin main --tags
 ```
+
+## Version 0.3.0 upgrade notes
+
+Validated with Google Ads Python SDK 35.0.0 (API v26) and MCP SDK 1.30.0.
+The MCP SDK remains on the compatible 1.x line; this is not a migration to MCP 2.x.
+`uv.lock` is now tracked so local installs and CI use the same dependency versions.
+
+OAuth exchange returns success and persistence status, **never the refresh token**.
+Local OAuth uses PKCE, state validation, a ten-minute expiry, and releases its
+callback port after completion. Token files are written atomically with private
+permissions. The manual code-copy fallback remains available.
+
+Clients upgrading from 0.2.x must accept nullable metrics, the additional response
+metadata, and the removal of `refresh_token` from the OAuth exchange response.
+Existing five idea tool names and targeting defaults are retained.
+
+Reference: [Google historical metrics](https://developers.google.com/google-ads/api/docs/keyword-planning/generate-historical-metrics),
+[Google keyword ideas](https://developers.google.com/google-ads/api/docs/keyword-planning/generate-keyword-ideas),
+[API releases](https://developers.google.com/google-ads/api/docs/release-notes).

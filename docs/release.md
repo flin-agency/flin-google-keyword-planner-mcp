@@ -22,9 +22,9 @@
 2. Run local checks:
 
 ```bash
-uv sync --extra dev
-python3 -m pytest
-python3 -m compileall src
+uv sync --locked --extra dev
+uv run --locked python -m pytest
+uv run --locked python -m compileall src
 uv build
 ```
 
@@ -49,8 +49,9 @@ git push origin main --tags
 2. Verifies tag version matches `pyproject.toml`
 3. Runs tests + compile + build
 4. Runs `twine check dist/*`
-5. Publishes to PyPI via OIDC Trusted Publishing
-6. Creates GitHub Release with `dist/*` artifacts
+5. Uploads the tested distributions as a workflow artifact
+6. Publishes those same files to PyPI via OIDC Trusted Publishing
+7. Creates GitHub Release with those same tested distributions
 
 ## After release
 
@@ -59,7 +60,7 @@ git push origin main --tags
 3. Smoke test install:
 
 ```bash
-uvx flin-google-keyword-planner-mcp@latest --help
+uvx --from flin-google-keyword-planner-mcp@latest python -c "from flin_google_ads_mcp import __version__; print(__version__)"
 ```
 
 4. Smoke test MCP tool listing:
@@ -80,3 +81,4 @@ Expected tools:
 - `keyword_ideas_from_keyword_and_url`
 - `keyword_ideas_from_site`
 - `keyword_ideas_historical`
+- `keyword_historical_metrics`

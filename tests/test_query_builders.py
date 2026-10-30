@@ -29,6 +29,7 @@ def test_server_exposes_expected_keyword_idea_tools() -> None:
         "keyword_ideas_from_keyword_and_url",
         "keyword_ideas_from_site",
         "keyword_ideas_historical",
+        "keyword_historical_metrics",
     ]
 
 

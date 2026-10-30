@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from functools import lru_cache
 from typing import Any
-import re
+from urllib.parse import urlsplit
 
 from .auth import get_effective_refresh_token, get_refresh_token_cache_version
 from .config import ConfigurationError, Settings, load_settings
-
 
 KEYWORD_PLAN_NETWORK_ALIASES = {
     "GOOGLE_SEARCH": "GOOGLE_SEARCH",
@@ -53,7 +53,11 @@ DEFAULT_LOCATION_IDS = ("2840",)
 
 
 def normalize_customer_id(raw_customer_id: str) -> str:
-    cleaned = re.sub(r"\D", "", raw_customer_id)
+    if not re.fullmatch(r"[0-9\s-]+", raw_customer_id):
+        raise ValueError(
+            "customer_id may contain only ASCII digits, spaces and hyphens."
+        )
+    cleaned = re.sub(r"[\s-]", "", raw_customer_id)
     if not cleaned:
         raise ValueError("customer_id must contain at least one digit.")
     if len(cleaned) != 10:
@@ -64,7 +68,9 @@ def normalize_customer_id(raw_customer_id: str) -> str:
 
 
 def normalize_entity_id(raw_entity_id: str) -> str:
-    cleaned = re.sub(r"\D", "", raw_entity_id)
+    if not re.fullmatch(r"[0-9\s-]+", raw_entity_id):
+        raise ValueError("ID may contain only ASCII digits, spaces and hyphens.")
+    cleaned = re.sub(r"[\s-]", "", raw_entity_id)
     if not cleaned:
         raise ValueError("ID must contain at least one digit.")
     return cleaned
@@ -79,12 +85,23 @@ def resolve_customer_id(customer_id: str | None, settings: Settings) -> str:
     return normalize_customer_id(candidate)
 
 
-def normalize_keyword_list(raw_keywords: list[str] | None) -> list[str]:
-    cleaned_keywords = [
-        str(keyword).strip() for keyword in (raw_keywords or []) if str(keyword).strip()
-    ]
+def normalize_keyword_list(
+    raw_keywords: list[str] | None, *, max_keywords: int = 20
+) -> list[str]:
+    if raw_keywords is not None and (
+        not isinstance(raw_keywords, list)
+        or any(not isinstance(keyword, str) for keyword in raw_keywords)
+    ):
+        raise ValueError("keywords must be a list of strings.")
+    cleaned_keywords = list(
+        dict.fromkeys(
+            keyword.strip() for keyword in (raw_keywords or []) if keyword.strip()
+        )
+    )
     if not cleaned_keywords:
         raise ValueError("keywords must contain at least one non-empty keyword.")
+    if len(cleaned_keywords) > max_keywords:
+        raise ValueError(f"keywords must contain at most {max_keywords} unique values.")
     return cleaned_keywords
 
 
@@ -94,6 +111,19 @@ def normalize_url_seed(url: str | None, *, field_name: str = "url") -> str:
     cleaned_url = str(url).strip()
     if not cleaned_url:
         raise ValueError(f"{field_name} cannot be blank.")
+    parsed = urlsplit(cleaned_url)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or any(char.isspace() for char in cleaned_url)
+    ):
+        raise ValueError(
+            f"{field_name} must be an absolute HTTP(S) URL without credentials."
+        )
+    # Accessing port validates malformed or out-of-range port numbers.
+    _ = parsed.port
     return cleaned_url
 
 
@@ -116,11 +146,15 @@ def normalize_keyword_annotations(values: list[str] | None) -> list[str]:
     if not values:
         return []
 
-    normalized_values = [str(value).strip().upper() for value in values if str(value).strip()]
+    normalized_values = [
+        str(value).strip().upper() for value in values if str(value).strip()
+    ]
     if not normalized_values:
         return []
 
-    invalid = [value for value in normalized_values if value not in ALLOWED_KEYWORD_ANNOTATIONS]
+    invalid = [
+        value for value in normalized_values if value not in ALLOWED_KEYWORD_ANNOTATIONS
+    ]
     if invalid:
         allowed = ", ".join(sorted(ALLOWED_KEYWORD_ANNOTATIONS))
         raise ValueError(
@@ -134,12 +168,16 @@ def normalize_aggregate_metric_types(values: list[str] | None) -> list[str]:
     if not values:
         return []
 
-    normalized_values = [str(value).strip().upper() for value in values if str(value).strip()]
+    normalized_values = [
+        str(value).strip().upper() for value in values if str(value).strip()
+    ]
     if not normalized_values:
         return []
 
     invalid = [
-        value for value in normalized_values if value not in ALLOWED_AGGREGATE_METRIC_TYPES
+        value
+        for value in normalized_values
+        if value not in ALLOWED_AGGREGATE_METRIC_TYPES
     ]
     if invalid:
         allowed = ", ".join(sorted(ALLOWED_AGGREGATE_METRIC_TYPES))
@@ -184,14 +222,16 @@ def build_geo_target_constant_resource_names(
     location_ids: list[str] | None,
 ) -> list[str]:
     raw_ids = (
-        list(location_ids)
-        if location_ids is not None
-        else list(DEFAULT_LOCATION_IDS)
+        list(location_ids) if location_ids is not None else list(DEFAULT_LOCATION_IDS)
     )
-    if not raw_ids:
-        raise ValueError("location_ids cannot be empty.")
-
-    return [f"geoTargetConstants/{normalize_entity_id(raw_id)}" for raw_id in raw_ids]
+    resources = list(
+        dict.fromkeys(
+            f"geoTargetConstants/{normalize_entity_id(raw_id)}" for raw_id in raw_ids
+        )
+    )
+    if len(resources) > 10:
+        raise ValueError("location_ids supports at most 10 unique locations.")
+    return resources
 
 
 def clamp_limit(limit: int, *, default: int = 50, max_limit: int = 1000) -> int:
@@ -266,6 +306,64 @@ def micros_to_currency(value: Any) -> float:
     return to_float(value) / 1_000_000
 
 
+def _optional_number(
+    message: Any, field: str, *, micros: bool = False
+) -> int | float | None:
+    """Preserve absent optional protobuf fields instead of inventing zeroes."""
+    pb = getattr(message, "_pb", message)
+    if pb is None:
+        return None
+    if hasattr(pb, "HasField") and not pb.HasField(field):
+        return None
+    value = getattr(message, field, None)
+    if value is None:
+        return None
+    return micros_to_currency(value) if micros else int(value)
+
+
+def _enum_field(message: Any, field: str) -> str:
+    pb = getattr(message, "_pb", message)
+    if pb is not None and hasattr(pb, "DESCRIPTOR"):
+        descriptor = pb.DESCRIPTOR.fields_by_name[field]
+        value = descriptor.enum_type.values_by_number.get(getattr(pb, field))
+        return value.name if value else "UNKNOWN"
+    return enum_name(getattr(message, field, "UNKNOWN"))
+
+
+def _read_request(method: Any, request: Any) -> Any:
+    """Bound transient transport retries; do not retry auth or quota failures."""
+    from google.api_core.exceptions import DeadlineExceeded, ServiceUnavailable
+    from google.api_core.retry import Retry, if_exception_type
+
+    return method(
+        request=request,
+        timeout=30,
+        retry=Retry(
+            predicate=if_exception_type(ServiceUnavailable, DeadlineExceeded),
+            initial=1,
+            maximum=8,
+            timeout=45,
+        ),
+    )
+
+
+def _result_context(request: Any) -> dict[str, Any]:
+    return {
+        "targeting": {
+            "language": request.language,
+            "locations": list(request.geo_target_constants),
+            "network": _enum_field(request, "keyword_plan_network"),
+            "include_adult_keywords": request.include_adult_keywords,
+        },
+        "metric_notes": {
+            "currency_unit": "customer_account_currency",
+            "competition": "advertiser_competition_not_organic_seo_difficulty",
+            "missing_values": "null means unavailable; zero means a reported zero",
+            "search_volumes": "approximate; Google may combine close variants",
+        },
+    }
+
+
 def format_google_ads_error(exc: Exception) -> dict[str, Any]:
     # GoogleAdsException import is intentionally dynamic to keep module import cheap for tests.
     if exc.__class__.__name__ != "GoogleAdsException":
@@ -296,23 +394,23 @@ def format_google_ads_error(exc: Exception) -> dict[str, Any]:
 def _monthly_search_volume_to_dict(volume: Any) -> dict[str, Any]:
     return {
         "year": to_int(getattr(volume, "year", None)),
-        "month": enum_name(getattr(volume, "month", "UNKNOWN")),
-        "monthly_searches": to_int(getattr(volume, "monthly_searches", None)),
+        "month": _enum_field(volume, "month"),
+        "monthly_searches": _optional_number(volume, "monthly_searches"),
     }
 
 
 def _keyword_idea_metrics_to_dict(metrics: Any) -> dict[str, Any]:
     return {
-        "average_monthly_searches": to_int(getattr(metrics, "avg_monthly_searches", None)),
-        "competition": enum_name(getattr(metrics, "competition", "UNKNOWN")),
-        "competition_index": to_int(getattr(metrics, "competition_index", None)),
-        "low_top_of_page_bid": micros_to_currency(
-            getattr(metrics, "low_top_of_page_bid_micros", None)
+        "average_monthly_searches": _optional_number(metrics, "avg_monthly_searches"),
+        "competition": _enum_field(metrics, "competition"),
+        "competition_index": _optional_number(metrics, "competition_index"),
+        "low_top_of_page_bid": _optional_number(
+            metrics, "low_top_of_page_bid_micros", micros=True
         ),
-        "high_top_of_page_bid": micros_to_currency(
-            getattr(metrics, "high_top_of_page_bid_micros", None)
+        "high_top_of_page_bid": _optional_number(
+            metrics, "high_top_of_page_bid_micros", micros=True
         ),
-        "average_cpc": micros_to_currency(getattr(metrics, "average_cpc_micros", None)),
+        "average_cpc": _optional_number(metrics, "average_cpc_micros", micros=True),
         "monthly_search_volumes": [
             _monthly_search_volume_to_dict(volume)
             for volume in getattr(metrics, "monthly_search_volumes", [])
@@ -328,7 +426,7 @@ def _keyword_annotations_to_dict(keyword_annotations: Any) -> dict[str, Any] | N
             {
                 "name": str(getattr(concept, "name", "")),
                 "group_name": str(getattr(concept_group, "name", "")),
-                "group_type": enum_name(getattr(concept_group, "type_", "UNKNOWN")),
+                "group_type": _enum_field(concept_group, "type_"),
             }
         )
 
@@ -343,7 +441,7 @@ def _keyword_annotations_to_dict(keyword_annotations: Any) -> dict[str, Any] | N
 def _aggregate_metric_results_to_dict(results: Any) -> dict[str, Any] | None:
     device_searches_payload = [
         {
-            "device": enum_name(getattr(device_result, "device", "UNKNOWN")),
+            "device": _enum_field(device_result, "device"),
             "search_count": to_int(getattr(device_result, "search_count", None)),
         }
         for device_result in getattr(results, "device_searches", [])
@@ -390,13 +488,17 @@ def _apply_historical_metrics_options(
 
         start_year_value = int(start_year)  # type: ignore[arg-type]
         end_year_value = int(end_year)  # type: ignore[arg-type]
+        if not (1 <= start_year_value <= 9999 and 1 <= end_year_value <= 9999):
+            raise ValueError("Historical years must be between 1 and 9999.")
 
         start_tuple = (start_year_value, MONTH_NAME_TO_NUMBER[normalized_start_month])
         end_tuple = (end_year_value, MONTH_NAME_TO_NUMBER[normalized_end_month])
         if start_tuple > end_tuple:
             raise ValueError("Historical range start must be before or equal to end.")
 
-        request.historical_metrics_options.year_month_range.start.year = start_year_value
+        request.historical_metrics_options.year_month_range.start.year = (
+            start_year_value
+        )
         request.historical_metrics_options.year_month_range.start.month = getattr(
             client.enums.MonthOfYearEnum,
             normalized_start_month,
@@ -408,7 +510,9 @@ def _apply_historical_metrics_options(
         )
 
     if has_explicit_range or include_average_cpc:
-        request.historical_metrics_options.include_average_cpc = bool(include_average_cpc)
+        request.historical_metrics_options.include_average_cpc = bool(
+            include_average_cpc
+        )
 
 
 def generate_keyword_ideas(
@@ -497,7 +601,9 @@ def generate_keyword_ideas(
         for metric_type in normalized_aggregate_metric_types:
             try:
                 request.aggregate_metrics.aggregate_metric_types.append(
-                    getattr(client.enums.KeywordPlanAggregateMetricTypeEnum, metric_type)
+                    getattr(
+                        client.enums.KeywordPlanAggregateMetricTypeEnum, metric_type
+                    )
                 )
             except AttributeError as exc:
                 raise ValueError(
@@ -524,15 +630,19 @@ def generate_keyword_ideas(
     else:
         request.site_seed.site = normalized_site_url or ""
 
-    response = service.generate_keyword_ideas(request=request)
-    first_page_response = getattr(response, "_response", None)
+    response = _read_request(service.generate_keyword_ideas, request)
+    # A short page is valid. Never auto-fetch another page while returning this
+    # page's continuation token, or clients will see repeated results.
+    first_page_response = next(iter(response.pages))
 
     items: list[dict[str, Any]] = []
-    for idea in response:
+    for idea in first_page_response.results:
         item: dict[str, Any] = {
             "keyword": str(idea.text),
             "metrics": _keyword_idea_metrics_to_dict(idea.keyword_idea_metrics),
-            "close_variants": [str(variant) for variant in getattr(idea, "close_variants", [])],
+            "close_variants": [
+                str(variant) for variant in getattr(idea, "close_variants", [])
+            ],
         }
 
         annotations = _keyword_annotations_to_dict(idea.keyword_annotations)
@@ -540,9 +650,6 @@ def generate_keyword_ideas(
             item["annotations"] = annotations
 
         items.append(item)
-
-        if len(items) >= normalized_limit:
-            break
 
     aggregate_metrics = None
     if first_page_response is not None:
@@ -553,15 +660,86 @@ def generate_keyword_ideas(
     next_page_token = None
     total_size = 0
     if first_page_response is not None:
-        raw_next_page_token = str(getattr(first_page_response, "next_page_token", "")).strip()
+        raw_next_page_token = str(
+            getattr(first_page_response, "next_page_token", "")
+        ).strip()
         next_page_token = raw_next_page_token or None
         total_size = to_int(getattr(first_page_response, "total_size", None))
 
     return {
+        **_result_context(request),
         "seed_mode": normalized_seed_mode,
         "count": len(items),
         "total_size": total_size,
         "next_page_token": next_page_token,
         "aggregate_metrics": aggregate_metrics,
         "items": items,
+    }
+
+
+def generate_keyword_historical_metrics(
+    *,
+    customer_id: str,
+    keywords: list[str],
+    language_id: str = DEFAULT_LANGUAGE_ID,
+    location_ids: list[str] | None = None,
+    network: str = "GOOGLE_SEARCH_AND_PARTNERS",
+    include_adult_keywords: bool = False,
+    start_year: int | None = None,
+    start_month: str | int | None = None,
+    end_year: int | None = None,
+    end_month: str | int | None = None,
+    include_average_cpc: bool = False,
+    login_customer_id: str | None = None,
+) -> dict[str, Any]:
+    """Fetch metrics for the supplied list, without generating additional ideas."""
+    normalized_keywords = normalize_keyword_list(keywords, max_keywords=10_000)
+    normalized_customer_id = normalize_customer_id(customer_id)
+    language = build_language_constant_resource_name(language_id)
+    locations = build_geo_target_constant_resource_names(location_ids)
+    normalized_network = normalize_keyword_plan_network(network)
+    client = get_google_ads_client(login_customer_id)
+    request = client.get_type("GenerateKeywordHistoricalMetricsRequest")
+    request.customer_id = normalized_customer_id
+    request.keywords.extend(normalized_keywords)
+    request.language = language
+    request.geo_target_constants.extend(locations)
+    request.keyword_plan_network = getattr(
+        client.enums.KeywordPlanNetworkEnum, normalized_network
+    )
+    request.include_adult_keywords = include_adult_keywords
+    _apply_historical_metrics_options(
+        request,
+        start_year=start_year,
+        start_month=start_month,
+        end_year=end_year,
+        end_month=end_month,
+        include_average_cpc=include_average_cpc,
+        client=client,
+    )
+    service = client.get_service("KeywordPlanIdeaService")
+    response = _read_request(service.generate_keyword_historical_metrics, request)
+    items = [
+        {
+            "keyword": str(result.text),
+            "close_variants": list(result.close_variants),
+            "metrics": _keyword_idea_metrics_to_dict(result.keyword_metrics),
+        }
+        for result in response.results
+    ]
+    represented = {
+        keyword.casefold()
+        for item in items
+        for keyword in [item["keyword"], *item["close_variants"]]
+    }
+    return {
+        **_result_context(request),
+        "requested_count": len(normalized_keywords),
+        "count": len(items),
+        "items": items,
+        "unmatched_keywords": [
+            keyword
+            for keyword in normalized_keywords
+            if keyword.casefold() not in represented
+        ],
     }

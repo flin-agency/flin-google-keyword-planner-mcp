@@ -1,25 +1,28 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
+import os
+import secrets
+import tempfile
+import threading
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
-import json
-import os
-import secrets
-import threading
 
 from .config import ConfigurationError, Settings
-
 
 GOOGLE_ADS_SCOPE = "https://www.googleapis.com/auth/adwords"
 GOOGLE_OAUTH_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 DEFAULT_REDIRECT_URI = "http://localhost:8080/"
+LOCAL_FLOW_TIMEOUT_SECONDS = 600
 TOKEN_FILE_ENV_VAR = "FLIN_GOOGLE_ADS_TOKEN_FILE"
 DEFAULT_TOKEN_FILE = (
     Path.home() / ".config" / "flin-google-keyword-planner-mcp" / "oauth-token.json"
@@ -38,6 +41,9 @@ class LocalAuthorizationFlow:
     authorization_url: str
     redirect_uri: str
     state: str
+    code_verifier: str = field(repr=False)
+    lock: Any = field(default_factory=threading.Lock, repr=False)
+    timer: threading.Timer | None = field(default=None, repr=False)
     status: str = "pending"
     error: str | None = None
     token_available: bool = False
@@ -48,6 +54,7 @@ def build_authorization_url(
     client_id: str,
     redirect_uri: str = DEFAULT_REDIRECT_URI,
     state: str | None = None,
+    code_verifier: str | None = None,
 ) -> str:
     params = {
         "client_id": client_id.strip(),
@@ -60,6 +67,15 @@ def build_authorization_url(
     }
     if state:
         params["state"] = state.strip()
+    if code_verifier:
+        params["code_challenge"] = (
+            base64.urlsafe_b64encode(
+                hashlib.sha256(code_verifier.encode("ascii")).digest()
+            )
+            .rstrip(b"=")
+            .decode("ascii")
+        )
+        params["code_challenge_method"] = "S256"
 
     return f"{GOOGLE_OAUTH_AUTH_URL}?{urlencode(params)}"
 
@@ -73,11 +89,13 @@ def clear_runtime_refresh_token() -> None:
 def set_runtime_refresh_token(refresh_token: str) -> str:
     token = refresh_token.strip()
     if not token:
-        raise ConfigurationError("Google OAuth response did not contain a refresh token.")
+        raise ConfigurationError(
+            "Google OAuth response did not contain a refresh token."
+        )
 
     global _runtime_refresh_token, _runtime_refresh_token_version
-    _runtime_refresh_token = token
     persist_refresh_token(token)
+    _runtime_refresh_token = token
     _runtime_refresh_token_version += 1
     return token
 
@@ -96,9 +114,11 @@ def load_persisted_refresh_token() -> str | None:
 
     try:
         payload = json.loads(token_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return None
 
+    if not isinstance(payload, dict):
+        return None
     refresh_token = payload.get("refresh_token")
     if isinstance(refresh_token, str) and refresh_token.strip():
         return refresh_token.strip()
@@ -107,15 +127,20 @@ def load_persisted_refresh_token() -> str | None:
 
 def persist_refresh_token(refresh_token: str) -> None:
     token_file = get_token_file_path()
-    token_file.parent.mkdir(parents=True, exist_ok=True)
-    token_file.write_text(
-        json.dumps({"refresh_token": refresh_token}, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    token_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # mkstemp starts with mode 0600. Atomic replace prevents partial reads and
+    # avoids following an existing token-file symlink while writing secrets.
+    fd, temporary_path = tempfile.mkstemp(prefix=".oauth-", dir=token_file.parent)
     try:
-        token_file.chmod(0o600)
-    except OSError:
-        pass
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump({"refresh_token": refresh_token}, stream)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, token_file)
+    finally:
+        if os.path.exists(temporary_path):
+            os.unlink(temporary_path)
 
 
 def extract_authorization_code(code_or_url: str) -> str:
@@ -128,7 +153,9 @@ def extract_authorization_code(code_or_url: str) -> str:
         params = parse_qs(parsed.query)
         if params.get("error"):
             description = params.get("error_description", params["error"])[0]
-            raise ConfigurationError(f"Google OAuth authorization failed: {description}")
+            raise ConfigurationError(
+                f"Google OAuth authorization failed: {description}"
+            )
         code_values = params.get("code")
         if not code_values or not code_values[0].strip():
             raise ConfigurationError(
@@ -180,9 +207,9 @@ def _request_google_token(payload: dict[str, str]) -> Mapping[str, Any]:
         with urlopen(request, timeout=30) as response:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
-        details = exc.read().decode("utf-8", errors="replace")
         raise ConfigurationError(
-            f"Google OAuth token exchange failed with HTTP {exc.code}: {details}"
+            f"Google OAuth token exchange failed with HTTP {exc.code}. "
+            "Check the OAuth client and generate a fresh authorization code."
         ) from exc
     except URLError as exc:
         raise ConfigurationError(f"Google OAuth token exchange failed: {exc}") from exc
@@ -195,6 +222,7 @@ def exchange_authorization_code(
     client_secret: str,
     redirect_uri: str = DEFAULT_REDIRECT_URI,
     token_request: TokenRequest | None = None,
+    code_verifier: str | None = None,
 ) -> str:
     cleaned_code = extract_authorization_code(code)
 
@@ -205,6 +233,8 @@ def exchange_authorization_code(
         "redirect_uri": redirect_uri.strip(),
         "grant_type": "authorization_code",
     }
+    if code_verifier:
+        payload["code_verifier"] = code_verifier
     response = (token_request or _request_google_token)(payload)
 
     if "error" in response:
@@ -227,8 +257,10 @@ def _normalize_loopback_redirect_uri(redirect_uri: str) -> tuple[str, str, int, 
         raise ConfigurationError(
             "Local OAuth flow requires an http://localhost or http://127.0.0.1 redirect_uri."
         )
-    if parsed.query or parsed.fragment:
-        raise ConfigurationError("Local OAuth redirect_uri cannot include query or fragment.")
+    if parsed.query or parsed.fragment or parsed.username or parsed.password:
+        raise ConfigurationError(
+            "Local OAuth redirect_uri cannot include credentials, query or fragment."
+        )
 
     host = parsed.hostname
     port = parsed.port if parsed.port is not None else 80
@@ -245,7 +277,11 @@ def _redirect_uri_with_bound_port(redirect_uri: str, bound_port: int) -> str:
 
 
 def _stop_local_flow_server(server: ThreadingHTTPServer) -> None:
-    threading.Thread(target=server.shutdown, daemon=True).start()
+    def stop() -> None:
+        server.shutdown()
+        server.server_close()
+
+    threading.Thread(target=stop, daemon=True).start()
 
 
 def start_local_authorization_flow(
@@ -261,9 +297,15 @@ def start_local_authorization_flow(
     )
 
     if _local_flow and _local_flow.status == "pending":
-        _stop_local_flow_server(_local_flow.server)
+        _local_flow.status = "cancelled"
+    if _local_flow:
+        if _local_flow.timer:
+            _local_flow.timer.cancel()
+        _local_flow.server.shutdown()
+        _local_flow.server.server_close()
 
     state = secrets.token_urlsafe(24)
+    code_verifier = secrets.token_urlsafe(64)
     flow_holder: dict[str, LocalAuthorizationFlow] = {}
 
     class OAuthCallbackHandler(BaseHTTPRequestHandler):
@@ -278,10 +320,18 @@ def start_local_authorization_flow(
                 return
 
             params = parse_qs(parsed.query)
+            returned_state = params.get("state", [""])[0]
+            if not secrets.compare_digest(returned_state.encode(), flow.state.encode()):
+                self.send_error(400, "OAuth state did not match.")
+                return
+            with flow.lock:
+                if flow.status != "pending":
+                    self.send_error(409, "OAuth flow is no longer pending.")
+                    return
+                flow.status = "exchanging"
+            if flow.timer:
+                flow.timer.cancel()
             try:
-                returned_state = params.get("state", [""])[0]
-                if returned_state != flow.state:
-                    raise ConfigurationError("OAuth state did not match.")
                 if params.get("error"):
                     description = params.get("error_description", params["error"])[0]
                     raise ConfigurationError(
@@ -294,6 +344,7 @@ def start_local_authorization_flow(
                     client_secret=settings.client_secret,
                     redirect_uri=flow.redirect_uri,
                     token_request=token_request,
+                    code_verifier=flow.code_verifier,
                 )
                 flow.status = "complete"
                 flow.token_available = True
@@ -302,13 +353,15 @@ def start_local_authorization_flow(
             except Exception as exc:
                 flow.status = "error"
                 flow.error = str(exc)
-                body = f"Authentication failed: {exc}"
+                body = "Authentication failed. Check OAuth status in your MCP client."
                 self.send_response(400)
 
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
-            self.wfile.write(body.encode("utf-8"))
-            _stop_local_flow_server(flow.server)
+            try:
+                self.wfile.write(body.encode("utf-8"))
+            finally:
+                _stop_local_flow_server(flow.server)
 
     server = ThreadingHTTPServer((host, port), OAuthCallbackHandler)
     actual_redirect_uri = _redirect_uri_with_bound_port(
@@ -319,16 +372,30 @@ def start_local_authorization_flow(
         client_id=settings.client_id,
         redirect_uri=actual_redirect_uri,
         state=state,
+        code_verifier=code_verifier,
     )
     flow = LocalAuthorizationFlow(
         server=server,
         authorization_url=authorization_url,
         redirect_uri=actual_redirect_uri,
         state=state,
+        code_verifier=code_verifier,
     )
     flow_holder["flow"] = flow
     _local_flow = flow
     threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def expire() -> None:
+        with flow.lock:
+            if flow.status != "pending":
+                return
+            flow.status = "expired"
+            flow.error = "OAuth flow expired. Start a new authorization flow."
+        _stop_local_flow_server(server)
+
+    flow.timer = threading.Timer(LOCAL_FLOW_TIMEOUT_SECONDS, expire)
+    flow.timer.daemon = True
+    flow.timer.start()
 
     return {
         "authorization_url": authorization_url,

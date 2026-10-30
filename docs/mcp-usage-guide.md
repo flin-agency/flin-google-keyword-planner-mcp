@@ -13,6 +13,7 @@ Use this guide when operating `flin-google-keyword-planner-mcp` from Claude or M
 - `keyword_ideas_from_keyword_and_url`
 - `keyword_ideas_from_site`
 - `keyword_ideas_historical`
+- `keyword_historical_metrics`
 
 ## Tool selection guide
 
@@ -24,7 +25,8 @@ Use:
 - `keyword_ideas_from_url` when you have a landing page URL only.
 - `keyword_ideas_from_keyword_and_url` when you have both and want broader ideas.
 - `keyword_ideas_from_site` when you want domain-wide site seed expansion.
-- `keyword_ideas_historical` when you need year-month constrained historical metrics.
+- `keyword_ideas_historical` when discovering new ideas with year-month constrained metrics.
+- `keyword_historical_metrics` when measuring an existing keyword list without generating new ideas.
 
 ## Common parameters
 
@@ -81,3 +83,18 @@ Historical range validation errors:
 - Always state `customer_id` and `login_customer_id` used.
 - Always state seed source (`keywords`, `url`, `keyword+url`, `site`).
 - Treat keyword ideas as planning input, not guaranteed outcomes.
+
+## Accurate interpretation
+
+Use explicit targeting for non-US research: German Switzerland is language `1001`
+and location `2756`. Empty locations (`[]`) means worldwide. Competition is paid
+advertising competition, not organic ranking difficulty. Bid/CPC values use the
+customer account currency. `null` means unavailable, not zero. Preserve returned
+close variants and do not treat unmatched keywords as zero-volume terms.
+
+Continue idea pages with the returned token and identical request parameters.
+Exact historical metrics accepts up to 10,000 keywords, has no pagination, and
+uses the past 12 months unless all four date fields are supplied.
+
+OAuth exchange returns status only; tokens are stored privately and never returned
+in the tool response. Prefer the local PKCE callback flow over manual code copying.

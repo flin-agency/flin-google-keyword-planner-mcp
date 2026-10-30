@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Mapping
-import os
-
 
 REQUIRED_ENV_VARS = (
     "GOOGLE_ADS_DEVELOPER_TOKEN",
@@ -34,7 +33,7 @@ def _get_bool(name: str, default: bool) -> bool:
 
 def missing_required_env_vars(env: Mapping[str, str] | None = None) -> list[str]:
     source = os.environ if env is None else env
-    return [key for key in REQUIRED_ENV_VARS if not source.get(key)]
+    return [key for key in REQUIRED_ENV_VARS if not source.get(key, "").strip()]
 
 
 @dataclass(frozen=True)
