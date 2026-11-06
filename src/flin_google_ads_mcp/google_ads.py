@@ -9,6 +9,11 @@ from urllib.parse import urlsplit
 from .auth import get_effective_refresh_token, get_refresh_token_cache_version
 from .config import ConfigurationError, Settings, load_settings
 
+
+class InputValidationError(ValueError):
+    """A safe, locally constructed input validation message."""
+
+
 KEYWORD_PLAN_NETWORK_ALIASES = {
     "GOOGLE_SEARCH": "GOOGLE_SEARCH",
     "SEARCH": "GOOGLE_SEARCH",
@@ -54,14 +59,14 @@ DEFAULT_LOCATION_IDS = ("2840",)
 
 def normalize_customer_id(raw_customer_id: str) -> str:
     if not re.fullmatch(r"[0-9\s-]+", raw_customer_id):
-        raise ValueError(
+        raise InputValidationError(
             "customer_id may contain only ASCII digits, spaces and hyphens."
         )
     cleaned = re.sub(r"[\s-]", "", raw_customer_id)
     if not cleaned:
-        raise ValueError("customer_id must contain at least one digit.")
+        raise InputValidationError("customer_id must contain at least one digit.")
     if len(cleaned) != 10:
-        raise ValueError(
+        raise InputValidationError(
             f"customer_id must be 10 digits after normalization, got {len(cleaned)}."
         )
     return cleaned
@@ -69,10 +74,12 @@ def normalize_customer_id(raw_customer_id: str) -> str:
 
 def normalize_entity_id(raw_entity_id: str) -> str:
     if not re.fullmatch(r"[0-9\s-]+", raw_entity_id):
-        raise ValueError("ID may contain only ASCII digits, spaces and hyphens.")
+        raise InputValidationError(
+            "ID may contain only ASCII digits, spaces and hyphens."
+        )
     cleaned = re.sub(r"[\s-]", "", raw_entity_id)
     if not cleaned:
-        raise ValueError("ID must contain at least one digit.")
+        raise InputValidationError("ID must contain at least one digit.")
     return cleaned
 
 
@@ -92,25 +99,29 @@ def normalize_keyword_list(
         not isinstance(raw_keywords, list)
         or any(not isinstance(keyword, str) for keyword in raw_keywords)
     ):
-        raise ValueError("keywords must be a list of strings.")
+        raise InputValidationError("keywords must be a list of strings.")
     cleaned_keywords = list(
         dict.fromkeys(
             keyword.strip() for keyword in (raw_keywords or []) if keyword.strip()
         )
     )
     if not cleaned_keywords:
-        raise ValueError("keywords must contain at least one non-empty keyword.")
+        raise InputValidationError(
+            "keywords must contain at least one non-empty keyword."
+        )
     if len(cleaned_keywords) > max_keywords:
-        raise ValueError(f"keywords must contain at most {max_keywords} unique values.")
+        raise InputValidationError(
+            f"keywords must contain at most {max_keywords} unique values."
+        )
     return cleaned_keywords
 
 
 def normalize_url_seed(url: str | None, *, field_name: str = "url") -> str:
     if url is None:
-        raise ValueError(f"{field_name} is required.")
+        raise InputValidationError(f"{field_name} is required.")
     cleaned_url = str(url).strip()
     if not cleaned_url:
-        raise ValueError(f"{field_name} cannot be blank.")
+        raise InputValidationError(f"{field_name} cannot be blank.")
     parsed = urlsplit(cleaned_url)
     if (
         parsed.scheme not in {"http", "https"}
@@ -119,7 +130,7 @@ def normalize_url_seed(url: str | None, *, field_name: str = "url") -> str:
         or parsed.password is not None
         or any(char.isspace() for char in cleaned_url)
     ):
-        raise ValueError(
+        raise InputValidationError(
             f"{field_name} must be an absolute HTTP(S) URL without credentials."
         )
     # Accessing port validates malformed or out-of-range port numbers.
@@ -136,7 +147,7 @@ def normalize_keyword_plan_network(network: str) -> str:
     resolved = KEYWORD_PLAN_NETWORK_ALIASES.get(normalized)
     if resolved is None:
         allowed = ", ".join(sorted(set(KEYWORD_PLAN_NETWORK_ALIASES.values())))
-        raise ValueError(
+        raise InputValidationError(
             f"Invalid keyword plan network {network!r}. Allowed values: {allowed}."
         )
     return resolved
@@ -157,7 +168,7 @@ def normalize_keyword_annotations(values: list[str] | None) -> list[str]:
     ]
     if invalid:
         allowed = ", ".join(sorted(ALLOWED_KEYWORD_ANNOTATIONS))
-        raise ValueError(
+        raise InputValidationError(
             f"Invalid keyword_annotation values {invalid!r}. Allowed values: {allowed}."
         )
 
@@ -181,7 +192,7 @@ def normalize_aggregate_metric_types(values: list[str] | None) -> list[str]:
     ]
     if invalid:
         allowed = ", ".join(sorted(ALLOWED_AGGREGATE_METRIC_TYPES))
-        raise ValueError(
+        raise InputValidationError(
             f"Invalid aggregate_metric_types values {invalid!r}. Allowed values: {allowed}."
         )
 
@@ -192,23 +203,23 @@ def normalize_month(raw_month: str | int) -> str:
     if isinstance(raw_month, int):
         month_name = MONTH_NUMBER_TO_NAME.get(raw_month)
         if month_name is None:
-            raise ValueError("Month integer must be between 1 and 12.")
+            raise InputValidationError("Month integer must be between 1 and 12.")
         return month_name
 
     cleaned = str(raw_month).strip().upper()
     if not cleaned:
-        raise ValueError("Month value cannot be empty.")
+        raise InputValidationError("Month value cannot be empty.")
 
     if cleaned.isdigit():
         month_number = int(cleaned)
         month_name = MONTH_NUMBER_TO_NAME.get(month_number)
         if month_name is None:
-            raise ValueError("Month integer must be between 1 and 12.")
+            raise InputValidationError("Month integer must be between 1 and 12.")
         return month_name
 
     if cleaned not in MONTH_NAME_TO_NUMBER:
         allowed = ", ".join(MONTH_NAME_TO_NUMBER.keys())
-        raise ValueError(
+        raise InputValidationError(
             f"Invalid month {raw_month!r}. Allowed month names: {allowed}; or integers 1-12."
         )
     return cleaned
@@ -230,7 +241,7 @@ def build_geo_target_constant_resource_names(
         )
     )
     if len(resources) > 10:
-        raise ValueError("location_ids supports at most 10 unique locations.")
+        raise InputValidationError("location_ids supports at most 10 unique locations.")
     return resources
 
 
@@ -365,9 +376,15 @@ def _result_context(request: Any) -> dict[str, Any]:
 
 
 def format_google_ads_error(exc: Exception) -> dict[str, Any]:
-    # GoogleAdsException import is intentionally dynamic to keep module import cheap for tests.
+    # SDK exception strings and API error messages can include request credentials.
+    # Only our validation errors and protobuf enum codes are safe to expose.
     if exc.__class__.__name__ != "GoogleAdsException":
-        return {"type": exc.__class__.__name__, "message": str(exc)}
+        message = (
+            str(exc)
+            if isinstance(exc, (ConfigurationError, InputValidationError))
+            else "Request failed. Check credentials, connectivity and account permissions."
+        )
+        return {"type": exc.__class__.__name__, "message": message}
 
     request_id = getattr(exc, "request_id", None)
     failure = getattr(exc, "failure", None)
@@ -376,10 +393,16 @@ def format_google_ads_error(exc: Exception) -> dict[str, Any]:
     if failure is not None and getattr(failure, "errors", None):
         for failure_error in failure.errors:
             error_code = getattr(failure_error, "error_code", None)
+            pb = getattr(error_code, "_pb", error_code)
+            code = "UNKNOWN"
+            if pb is not None and hasattr(pb, "WhichOneof"):
+                selected = pb.WhichOneof("error_code")
+                if selected:
+                    code = f"{selected}: {_enum_field(pb, selected)}"
             errors.append(
                 {
-                    "message": getattr(failure_error, "message", "Unknown API error"),
-                    "code": str(error_code) if error_code is not None else "UNKNOWN",
+                    "message": "Google Ads rejected the request. See the error code.",
+                    "code": code,
                 }
             )
 
@@ -387,7 +410,7 @@ def format_google_ads_error(exc: Exception) -> dict[str, Any]:
         "type": exc.__class__.__name__,
         "request_id": request_id,
         "errors": errors,
-        "message": str(exc),
+        "message": "Google Ads request failed. See error codes and request_id.",
     }
 
 
@@ -459,7 +482,9 @@ def _validate_seed_mode(seed_mode: str) -> str:
     normalized = seed_mode.strip().lower()
     if normalized not in ALLOWED_SEED_MODES:
         allowed = ", ".join(sorted(ALLOWED_SEED_MODES))
-        raise ValueError(f"Invalid seed_mode {seed_mode!r}. Allowed values: {allowed}.")
+        raise InputValidationError(
+            f"Invalid seed_mode {seed_mode!r}. Allowed values: {allowed}."
+        )
     return normalized
 
 
@@ -479,7 +504,7 @@ def _apply_historical_metrics_options(
 
     if has_explicit_range:
         if None in (start_year, start_month, end_year, end_month):
-            raise ValueError(
+            raise InputValidationError(
                 "Historical range requires start_year, start_month, end_year, and end_month."
             )
 
@@ -489,12 +514,14 @@ def _apply_historical_metrics_options(
         start_year_value = int(start_year)  # type: ignore[arg-type]
         end_year_value = int(end_year)  # type: ignore[arg-type]
         if not (1 <= start_year_value <= 9999 and 1 <= end_year_value <= 9999):
-            raise ValueError("Historical years must be between 1 and 9999.")
+            raise InputValidationError("Historical years must be between 1 and 9999.")
 
         start_tuple = (start_year_value, MONTH_NAME_TO_NUMBER[normalized_start_month])
         end_tuple = (end_year_value, MONTH_NAME_TO_NUMBER[normalized_end_month])
         if start_tuple > end_tuple:
-            raise ValueError("Historical range start must be before or equal to end.")
+            raise InputValidationError(
+                "Historical range start must be before or equal to end."
+            )
 
         request.historical_metrics_options.year_month_range.start.year = (
             start_year_value
@@ -583,7 +610,7 @@ def generate_keyword_ideas(
             normalized_network,
         )
     except AttributeError as exc:
-        raise ValueError(
+        raise InputValidationError(
             f"Unsupported keyword plan network {normalized_network!r} for this Google Ads client version."
         ) from exc
 
@@ -593,7 +620,7 @@ def generate_keyword_ideas(
                 getattr(client.enums.KeywordPlanKeywordAnnotationEnum, annotation_name)
             )
         except AttributeError as exc:
-            raise ValueError(
+            raise InputValidationError(
                 f"Unsupported keyword annotation {annotation_name!r} for this Google Ads client version."
             ) from exc
 
@@ -606,7 +633,7 @@ def generate_keyword_ideas(
                     )
                 )
             except AttributeError as exc:
-                raise ValueError(
+                raise InputValidationError(
                     f"Unsupported aggregate metric type {metric_type!r} for this Google Ads client version."
                 ) from exc
 

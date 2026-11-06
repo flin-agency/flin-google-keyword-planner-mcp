@@ -1,0 +1,99 @@
+{
+  "manifest_version": "0.4",
+  "name": "flin-google-keyword-planner-mcp",
+  "display_name": "flin Google Keyword Planner",
+  "version": "0.3.1",
+  "description": "Read-only Google Ads keyword ideas and historical search metrics for Claude Desktop on Mac.",
+  "author": {
+    "name": "flin.agency",
+    "url": "https://flin.agency"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/flin-agency/flin-google-keyword-planner-mcp",
+  "documentation": "https://github.com/flin-agency/flin-google-keyword-planner-mcp/blob/main/docs/claude-desktop-mac.md",
+  "privacy_policies": [
+    "https://policies.google.com/privacy"
+  ],
+  "server": {
+    "type": "uv",
+    "entry_point": "desktop/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--no-config",
+        "--directory",
+        "${__dirname}",
+        "--locked",
+        "--no-dev",
+        "--python",
+        "3.13",
+        "desktop/server.py"
+      ],
+      "env": {
+        "GOOGLE_ADS_DEVELOPER_TOKEN": "${user_config.developer_token}",
+        "GOOGLE_ADS_CLIENT_ID": "${user_config.client_id}",
+        "GOOGLE_ADS_CLIENT_SECRET": "${user_config.client_secret}",
+        "GOOGLE_ADS_CUSTOMER_ID": "${user_config.customer_id}",
+        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "${user_config.login_customer_id}",
+        "GOOGLE_ADS_REFRESH_TOKEN": "${user_config.refresh_token}"
+      }
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "darwin"
+    ],
+    "runtimes": {
+      "python": ">=3.13 <3.14"
+    }
+  },
+  "keywords": [
+    "google-ads",
+    "keyword-planner",
+    "seo"
+  ],
+  "user_config": {
+    "developer_token": {
+      "type": "string",
+      "title": "Google Ads developer token",
+      "description": "Developer token from your Google Ads manager account.",
+      "required": true,
+      "sensitive": true
+    },
+    "client_id": {
+      "type": "string",
+      "title": "OAuth client ID",
+      "description": "Google Cloud OAuth client ID (Desktop app recommended).",
+      "required": true
+    },
+    "client_secret": {
+      "type": "string",
+      "title": "OAuth client secret",
+      "description": "Secret for the Google Cloud OAuth client.",
+      "required": true,
+      "sensitive": true
+    },
+    "customer_id": {
+      "type": "string",
+      "title": "Google Ads customer ID",
+      "description": "10-digit Ads account ID, e.g. 123-456-7890.",
+      "required": true
+    },
+    "login_customer_id": {
+      "type": "string",
+      "title": "Manager account ID (optional)",
+      "description": "Manager account ID when accessing a client account through an MCC.",
+      "required": false,
+      "default": ""
+    },
+    "refresh_token": {
+      "type": "string",
+      "title": "Refresh token (optional)",
+      "description": "Leave blank to connect through the local OAuth browser flow.",
+      "required": false,
+      "sensitive": true,
+      "default": ""
+    }
+  }
+}

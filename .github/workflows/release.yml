@@ -16,22 +16,24 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - name: Secret scan (gitleaks OSS)
-        uses: docker://zricethezav/gitleaks:v8.28.0
-        with:
-          args: dir /github/workspace --redact --exit-code 1
+      - name: Secret scan (checksum-pinned gitleaks)
+        run: |
+          curl --fail --location --silent --show-error https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" dir . --redact --exit-code 1
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
 
       - name: Install uv
         run: |
           python -m pip install --upgrade pip
-          python -m pip install uv
+          python -m pip install uv==0.10.11
 
       - name: Validate tag version matches pyproject
         if: startsWith(github.ref, 'refs/tags/v')
@@ -55,6 +57,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --extra dev
 
+      - name: Audit locked runtime dependencies
+        run: |
+          uv export --locked --no-dev --no-emit-project --format requirements-txt --output-file "$RUNNER_TEMP/runtime.txt" >/dev/null
+          uvx pip-audit --disable-pip --no-deps -r "$RUNNER_TEMP/runtime.txt"
+
       - name: Run tests
         run: uv run --locked python -m pytest
 
@@ -71,16 +78,36 @@ jobs:
           twine check dist/*
 
       - name: Preserve tested distributions
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: distributions
           path: dist/*
           if-no-files-found: error
 
+  desktop:
+    name: Validate Mac desktop bundle
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - run: python -m pip install uv==0.10.11
+      - run: uv sync --locked --extra dev
+      - run: uv run --locked python -m pytest
+      - run: npx --yes @anthropic-ai/mcpb@2.1.2 validate manifest.json
+      - run: uv run --locked python scripts/build_mcpb.py
+      - run: uv run --locked python scripts/smoke_desktop.py dist/desktop/*.mcpb
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-bundle
+          path: dist/desktop/*
+          if-no-files-found: error
+
   publish-pypi:
     name: Publish to PyPI
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, desktop]
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -90,30 +117,36 @@ jobs:
       contents: read
     steps:
       - name: Download tested distributions
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: distributions
           path: dist/
 
       - name: Publish package to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
 
   github-release:
     name: Create GitHub Release
-    needs: build
+    needs: [build, desktop]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Download tested distributions
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: distributions
           path: dist/
+
+      - name: Download tested Mac bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: desktop-bundle
+          path: desktop-dist/
 
       - name: Publish GitHub release
         env:
@@ -122,7 +155,7 @@ jobs:
           set -euo pipefail
           TAG="$GITHUB_REF_NAME"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
+            gh release upload "$TAG" dist/* desktop-dist/*
           else
-            gh release create "$TAG" dist/* --generate-notes
+            gh release create "$TAG" dist/* desktop-dist/* --generate-notes --verify-tag
           fi

@@ -56,6 +56,8 @@ def build_authorization_url(
     state: str | None = None,
     code_verifier: str | None = None,
 ) -> str:
+    # Desktop flows must not send authorization codes to a remote callback.
+    redirect_uri, _, _, _ = _normalize_loopback_redirect_uri(redirect_uri)
     params = {
         "client_id": client_id.strip(),
         "redirect_uri": redirect_uri.strip(),
@@ -152,9 +154,8 @@ def extract_authorization_code(code_or_url: str) -> str:
     if parsed.scheme and parsed.netloc:
         params = parse_qs(parsed.query)
         if params.get("error"):
-            description = params.get("error_description", params["error"])[0]
             raise ConfigurationError(
-                f"Google OAuth authorization failed: {description}"
+                "Google OAuth authorization failed. Start a new authorization flow."
             )
         code_values = params.get("code")
         if not code_values or not code_values[0].strip():
@@ -212,7 +213,9 @@ def _request_google_token(payload: dict[str, str]) -> Mapping[str, Any]:
             "Check the OAuth client and generate a fresh authorization code."
         ) from exc
     except URLError as exc:
-        raise ConfigurationError(f"Google OAuth token exchange failed: {exc}") from exc
+        raise ConfigurationError(
+            "Google OAuth token endpoint could not be reached."
+        ) from exc
 
 
 def exchange_authorization_code(
@@ -224,6 +227,7 @@ def exchange_authorization_code(
     token_request: TokenRequest | None = None,
     code_verifier: str | None = None,
 ) -> str:
+    redirect_uri, _, _, _ = _normalize_loopback_redirect_uri(redirect_uri)
     cleaned_code = extract_authorization_code(code)
 
     payload = {
@@ -238,8 +242,9 @@ def exchange_authorization_code(
     response = (token_request or _request_google_token)(payload)
 
     if "error" in response:
-        description = response.get("error_description") or response["error"]
-        raise ConfigurationError(f"Google OAuth token exchange failed: {description}")
+        raise ConfigurationError(
+            "Google OAuth token exchange failed. Check the OAuth client and use a fresh code."
+        )
 
     refresh_token = response.get("refresh_token")
     if not isinstance(refresh_token, str):
@@ -333,9 +338,8 @@ def start_local_authorization_flow(
                 flow.timer.cancel()
             try:
                 if params.get("error"):
-                    description = params.get("error_description", params["error"])[0]
                     raise ConfigurationError(
-                        f"Google OAuth authorization failed: {description}"
+                        "Google OAuth authorization failed. Start a new authorization flow."
                     )
                 code = params.get("code", [""])[0]
                 exchange_authorization_code(
@@ -350,13 +354,15 @@ def start_local_authorization_flow(
                 flow.token_available = True
                 body = "Authentication complete. You may close this browser tab."
                 self.send_response(200)
-            except Exception as exc:
+            except Exception:
                 flow.status = "error"
-                flow.error = str(exc)
+                flow.error = "Authentication failed. Check credentials and start a new OAuth flow."
                 body = "Authentication failed. Check OAuth status in your MCP client."
                 self.send_response(400)
 
             self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
             self.end_headers()
             try:
                 self.wfile.write(body.encode("utf-8"))

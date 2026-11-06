@@ -4,6 +4,15 @@ MCP server for Google Ads Keyword Planner ideas.
 
 This server exposes focused read-only tools so an LLM can clearly choose the right seed strategy.
 
+## Claude Desktop auf dem Mac
+
+[Installationspaket v0.3.1 herunterladen](https://github.com/flin-agency/flin-google-keyword-planner-mcp/releases/download/v0.3.1/flin-google-keyword-planner-mcp-0.3.1-mac.mcpb)
+
+In Claude unter **Settings → Desktop app → Extensions → Manage → Advanced settings →
+Install Extension…** installieren und die Google-Ads-Zugangsdaten eingeben.
+Aktuelles Claude Desktop mit MCPB-0.4-/UV-Unterstützung erforderlich.
+[Schritt-für-Schritt-Anleitung und Sicherheitshinweise](docs/claude-desktop-mac.md).
+
 ## Exposed MCP tools
 
 - `keyword_ideas_from_keywords`

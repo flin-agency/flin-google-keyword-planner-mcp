@@ -18,6 +18,7 @@
 1. Update versions:
 - `pyproject.toml` (`project.version`)
 - `src/flin_google_ads_mcp/__init__.py` (`__version__`)
+- `manifest.json` (`version`) and versioned download links in the README/Mac guide
 
 2. Run local checks:
 
@@ -26,6 +27,9 @@ uv sync --locked --extra dev
 uv run --locked python -m pytest
 uv run --locked python -m compileall src
 uv build
+uv run --locked python scripts/build_mcpb.py
+npx --yes @anthropic-ai/mcpb@2.1.2 validate manifest.json
+uv run --locked python scripts/smoke_desktop.py dist/desktop/*.mcpb
 ```
 
 3. Validate git state:
@@ -45,13 +49,19 @@ git push origin main --tags
 
 ## What `release.yml` does on tag `v*`
 
-1. Runs secret scan (`gitleaks` OSS container; no `GITLEAKS_LICENSE` secret needed)
+1. Runs secret scan (checksum-pinned `gitleaks` OSS binary; no license secret needed)
 2. Verifies tag version matches `pyproject.toml`
-3. Runs tests + compile + build
+3. Audits locked dependencies and runs tests + compile + build
 4. Runs `twine check dist/*`
 5. Uploads the tested distributions as a workflow artifact
-6. Publishes those same files to PyPI via OIDC Trusted Publishing
-7. Creates GitHub Release with those same tested distributions
+6. Builds and validates the MCPB manifest on macOS and smoke-tests the exact bundle launcher
+7. Publishes the Python distributions to PyPI via OIDC Trusted Publishing only after both build jobs succeed
+8. Creates GitHub Release with the tested Python distributions, `.mcpb` and SHA-256 checksum
+
+The desktop archive uses an explicit source allowlist in `scripts/build_mcpb.py`.
+Add new runtime modules there when necessary. Local credentials, `.env`, token
+files, virtual environments and Git metadata are never copied by directory glob.
+The MCPB has its own artifact, so it is never uploaded to PyPI as a Python package.
 
 ## After release
 

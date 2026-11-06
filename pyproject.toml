@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flin-google-keyword-planner-mcp"
-version = "0.3.0"
+version = "0.3.1"
 description = "Read-only Google Ads Keyword Planner MCP server for keyword ideas and historical metrics."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,6 +16,7 @@ keywords = ["mcp", "google-ads", "keyword-planner", "model-context-protocol", "c
 dependencies = [
   "mcp>=1.30.0,<2",
   "google-ads>=35.0.0,<36",
+  "oauthlib>=4.0.1",
 ]
 
 [project.optional-dependencies]
