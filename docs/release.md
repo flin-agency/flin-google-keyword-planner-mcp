@@ -56,7 +56,8 @@ git push origin main --tags
 5. Uploads the tested distributions as a workflow artifact
 6. Builds and validates the MCPB manifest on macOS and smoke-tests the exact bundle launcher
 7. Publishes the Python distributions to PyPI via OIDC Trusted Publishing only after both build jobs succeed
-8. Creates GitHub Release with the tested Python distributions, `.mcpb` and SHA-256 checksum
+8. Verifies that the unchanged Mac starter resolves the newly published version from PyPI and starts it successfully
+9. Creates GitHub Release with the tested Python distributions, `.mcpb` and SHA-256 checksum
 
 The desktop archive uses an explicit source allowlist in `scripts/build_mcpb.py`.
 Add new runtime modules there when necessary. Local credentials, `.env`, token
@@ -92,3 +93,20 @@ Expected tools:
 - `keyword_ideas_from_site`
 - `keyword_ideas_historical`
 - `keyword_historical_metrics`
+
+## Automatic server updates (starter 0.3.2+)
+
+The desktop entry point is a standard-library launcher. It runs `uv tool run`
+with `@latest`, `--refresh`, isolated tools, no discovered configuration and stable
+releases only. It ignores bundled server code and the development lockfile.
+Package-manager environment overrides are removed; Google Ads credentials remain.
+
+The update integration test serves real test wheels on loopback, publishes a newer
+stable wheel alongside a prerelease and verifies a second invocation with the same
+cache chooses the newer stable release. It also checks that an unavailable index
+fails instead of silently executing stale code. CI must have uv installed.
+
+Existing 0.3.1 installations need a one-time starter upgrade. Future server code
+updates need only a restart. A changed launcher, configuration schema or required
+Python runtime may still require a new MCPB. The startup check requires network
+access and intentionally trusts future stable releases of this PyPI project.

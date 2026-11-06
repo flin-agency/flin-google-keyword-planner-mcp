@@ -1,7 +1,7 @@
 # Claude Desktop auf macOS installieren
 
-1. Lade `flin-google-keyword-planner-mcp-0.3.1-mac.mcpb` aus dem
-   [GitHub-Release v0.3.1](https://github.com/flin-agency/flin-google-keyword-planner-mcp/releases/tag/v0.3.1).
+1. Lade `flin-google-keyword-planner-mcp-0.3.2-mac.mcpb` aus dem
+   [GitHub-Release v0.3.2](https://github.com/flin-agency/flin-google-keyword-planner-mcp/releases/tag/v0.3.2).
 2. Aktualisiere Claude Desktop. Öffne **Settings → Desktop app → Extensions →
    Manage → Advanced settings → Install Extension…**. In älteren Oberflächen
    findest du den Bereich direkt unter **Settings → Extensions**.
@@ -23,8 +23,8 @@ Falls Port 8080 belegt ist, kann ein Desktop-Client
 
 - Aktuelles Claude Desktop für macOS mit MCPB-0.4-/UV-Runtime-Unterstützung;
   gegebenenfalls müssen Unternehmensrichtlinien eigene Erweiterungen erlauben.
-- Internet beim ersten Start: Claude/UV stellt Python 3.13 und die im mitgelieferten
-  `uv.lock` festgelegten Abhängigkeiten bereit. Das Paket enthält keine native
+- Internet bei jedem Serverstart: Claude/UV stellt Python 3.13 bereit. Der Starter
+  lädt die neueste stabile, mit dieser Laufzeit kompatible Version von PyPI. Das Paket enthält keine native
   Mac-Binärdatei und verwendet passende Abhängigkeiten für Apple Silicon bzw. Intel.
 - Google Ads API Developer Token, OAuth-Client und Zugriff auf das Ads-Konto.
   Einschränkungen oder Freigaben seitens Google gelten weiterhin.
@@ -60,10 +60,31 @@ nicht organische SEO-Schwierigkeit.
 
 ## Updates und Fehler
 
-Installiere neue `.mcpb`-Versionen wieder über die Erweiterungseinstellungen.
+**Ab Starter-Version 0.3.2 werden Serverupdates automatisch von PyPI übernommen.**
+Bei jedem Start wird mit `@latest` und Cache-Aktualisierung neu geprüft; eine lokal
+installierte ältere Version wird nicht bevorzugt. Vorabversionen werden ausgeschlossen.
+Die mitgelieferten Quellen und `uv.lock` sind ein Referenzstand für Entwicklung und
+Prüfung; der Starter führt ausschliesslich das aktuelle PyPI-Paket aus.
+
+Ein bereits laufender Server wird nicht während einer Anfrage ausgetauscht. Nach
+Veröffentlichung eines Updates genügt ein Serverneustart oder das vollständige
+Beenden und erneute Öffnen von Claude. Ohne erreichbaren Paketindex kann der Start
+fehlschlagen; es gibt keinen stillen Rückfall auf eine alte Version.
+
+**Einmalige Umstellung:** Wer 0.3.1 installiert hat, muss das neue `.mcpb` einmal
+installieren. Die alte Installation kann diese Änderung nicht selbst übernehmen.
+Danach benötigen normale PyPI-Serverupdates keine neue `.mcpb`-Installation.
+Änderungen am Starter selbst, an Pflichtfeldern oder an der unterstützten Python-
+Laufzeit können weiterhin eine neue Erweiterung erfordern.
+
+Automatische Updates führen künftig veröffentlichten Code dieses PyPI-Projekts
+und dessen Abhängigkeiten aus. Die Prüfsumme der `.mcpb` gilt für den Starter und
+den enthaltenen Referenzstand, nicht für alle zukünftigen PyPI-Versionen.
 Bei fehlenden Tools Claude neu starten und die Pflichtfelder prüfen. Wenn Claude
 den Servertyp `uv` nicht erkennt, Claude aktualisieren; die manuelle
 [uvx-Konfiguration im README](../README.md#claude-integration) bleibt verfügbar.
 
 [Offizielle Installationshilfe](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
 und [MCPB-Spezifikation](https://github.com/modelcontextprotocol/mcpb/blob/main/MANIFEST.md).
+
+[UV-Dokumentation zur Aktualisierung mit `@latest`](https://docs.astral.sh/uv/concepts/tools/#tool-versions).

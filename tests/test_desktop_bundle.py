@@ -38,11 +38,12 @@ def test_bundle_is_reproducible_and_excludes_unlisted_secrets(tmp_path):
         )
 
 
-def test_manifest_pins_dependencies_and_protects_secret_fields():
+def test_manifest_runs_independent_launcher_and_protects_secret_fields():
     manifest = json.loads((ROOT / "manifest.json").read_text())
     assert manifest["version"] == __version__
     args = manifest["server"]["mcp_config"]["args"]
-    assert "--locked" in args and "--no-config" in args
+    assert "--no-project" in args and "--no-config" in args
+    assert "--locked" not in args
     for field in ("developer_token", "client_secret", "refresh_token"):
         assert manifest["user_config"][field]["sensitive"] is True
         assert field not in " ".join(args)

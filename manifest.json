@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "flin-google-keyword-planner-mcp",
   "display_name": "flin Google Keyword Planner",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Read-only Google Ads keyword ideas and historical search metrics for Claude Desktop on Mac.",
   "author": {
     "name": "flin.agency",
@@ -22,13 +22,10 @@
       "args": [
         "run",
         "--no-config",
-        "--directory",
-        "${__dirname}",
-        "--locked",
-        "--no-dev",
+        "--no-project",
         "--python",
         "3.13",
-        "desktop/server.py"
+        "${__dirname}/desktop/server.py"
       ],
       "env": {
         "GOOGLE_ADS_DEVELOPER_TOKEN": "${user_config.developer_token}",
