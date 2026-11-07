@@ -5,11 +5,13 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from . import __version__
 from .auth import (
     DEFAULT_REDIRECT_URI,
     build_authorization_url,
     exchange_authorization_code,
     get_local_authorization_flow_status,
+    get_refresh_token_source,
     start_local_authorization_flow,
 )
 from .config import ConfigurationError, load_settings
@@ -17,6 +19,7 @@ from .google_ads import (
     format_google_ads_error,
     generate_keyword_historical_metrics,
     generate_keyword_ideas,
+    normalize_customer_id,
     resolve_customer_id,
 )
 
@@ -33,6 +36,65 @@ mcp = FastMCP(
 
 def _error_payload(exc: Exception) -> dict[str, Any]:
     return {"ok": False, "error": format_google_ads_error(exc)}
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+)
+def connection_status() -> dict[str, str]:
+    """Report local setup and the running server version, without network or login.
+
+    A local refresh token does not prove valid Google authorization. This tool
+    never starts OAuth, refreshes a token, or consumes Google Ads API quota.
+    """
+    result = {
+        "server_version": __version__,
+        "configuration_status": "incomplete",
+        "auth_status": "unauthenticated",
+        "live_access": "not_checked",
+        "next_step": "Enter the required Google Ads credentials in the extension settings.",
+    }
+    try:
+        if get_refresh_token_source() is not None:
+            result["auth_status"] = "unknown"
+    except OSError:
+        result["auth_status"] = "unknown"
+
+    try:
+        settings = load_settings()
+    except ConfigurationError:
+        return result
+    for value, field_name in (
+        (settings.default_customer_id, "Customer ID"),
+        (settings.login_customer_id, "Manager account ID"),
+    ):
+        if value:
+            try:
+                normalize_customer_id(value)
+            except ValueError:
+                result["next_step"] = (
+                    f"Correct the {field_name} in the extension settings (10 digits)."
+                )
+                return result
+    result["configuration_status"] = "configured"
+    if result["auth_status"] == "unauthenticated":
+        result["next_step"] = (
+            "Run google_ads_start_local_oauth_flow and approve the Google login."
+        )
+    elif not settings.default_customer_id:
+        result["next_step"] = (
+            "Set Customer ID or pass customer_id to a keyword tool; live access is not checked."
+        )
+    else:
+        result["next_step"] = (
+            "Run a keyword query with explicit language and location to check live access."
+        )
+    return result
 
 
 def _run_keyword_ideas_tool(

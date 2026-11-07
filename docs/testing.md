@@ -42,7 +42,7 @@ export GOOGLE_ADS_CLIENT_SECRET="..."
 # Optional: export this for persistent auth, or generate it with the MCP OAuth tools.
 # export GOOGLE_ADS_REFRESH_TOKEN="..."
 export GOOGLE_ADS_CUSTOMER_ID="1234567890"
-export GOOGLE_ADS_LOGIN_CUSTOMER_ID="1234567890"
+# Optional for MCC access: export GOOGLE_ADS_LOGIN_CUSTOMER_ID="1234567890"
 ```
 
 ### 2.2 List tools
@@ -55,6 +55,7 @@ npx -y @modelcontextprotocol/inspector --cli \
 
 Expected tools:
 
+- `connection_status`
 - `google_ads_authorization_url`
 - `google_ads_exchange_authorization_code`
 - `google_ads_start_local_oauth_flow`
@@ -148,7 +149,7 @@ Use this config:
   "mcpServers": {
     "flin-google-keyword-planner-mcp": {
       "command": "uvx",
-      "args": ["flin-google-keyword-planner-mcp@latest"],
+      "args": ["--refresh", "--prerelease", "disallow", "--from", "flin-google-keyword-planner-mcp>=0.3.2,<0.4.0", "flin-google-keyword-planner-mcp"],
       "env": {
         "GOOGLE_ADS_DEVELOPER_TOKEN": "xxx",
         "GOOGLE_ADS_CLIENT_ID": "xxx",
@@ -215,3 +216,21 @@ This tool does not accept pagination or generate additional ideas.
 The OAuth tests bind only to loopback and use fake credentials. They require
 permission to open a local listening socket, but do not contact Google.
 CI runs the suite on Python 3.10, 3.13, and 3.14.
+
+## Desktop release checks
+
+`connection_status` is safe without credentials and never performs a Google request.
+Tests freeze the original 0.3 input schemas and verify that local tokens yield
+`auth_status=unknown`, `live_access=not_checked`, with no secrets in the output.
+The real UV update test retains a cache, credentials and a private token file while
+replacing test wheels; it must choose a newer 0.3 patch and reject 0.4/1.0/prereleases.
+
+The package smoke extracts the built archive outside the source checkout. Before
+publication it may resolve the previous compatible PyPI release. After publication
+it requires the new version from the running `connection_status`, then restarts
+with fake saved settings and checks that token contents and permissions persist.
+Both versioned and stable-alias downloads must be byte-identical with valid hashes.
+
+Linux CI uses Python 3.10/3.13/3.14. Mac jobs explicitly assert `arm64`; a Linux run
+is not an Apple-Silicon check. Real Google account access, interactive consent and
+Claude UI installation/setting retention are separate manual checks, not CI claims.

@@ -4,6 +4,7 @@ Use this guide when operating `flin-google-keyword-planner-mcp` from Claude or M
 
 ## Available tools
 
+- `connection_status`
 - `keyword_ideas_from_keywords`
 - `google_ads_start_local_oauth_flow`
 - `google_ads_oauth_status`
@@ -18,6 +19,7 @@ Use this guide when operating `flin-google-keyword-planner-mcp` from Claude or M
 ## Tool selection guide
 
 Use:
+- `connection_status` for the running server version and local setup only. It does not start a browser or call Google. A local token yields `auth_status=unknown`; `live_access` remains `not_checked`.
 - `google_ads_start_local_oauth_flow` when the refresh token is expired or revoked and you need a browser-based OAuth refresh inside the MCP session.
 - `google_ads_oauth_status` after browser approval to verify that `token_available` is `true`; `token_source` shows `runtime`, `file`, or `env`.
 - `google_ads_authorization_url` and `google_ads_exchange_authorization_code` as a manual fallback when the local callback flow is not possible.

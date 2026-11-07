@@ -42,7 +42,10 @@ def test_launcher_uses_managed_uv_and_preserves_credentials(monkeypatch, capsys)
     )
     launcher.main()
     assert captured["path"] == "/managed/runtime/uv"
-    assert captured["args"][-1] == "flin-google-keyword-planner-mcp@latest"
+    assert captured["args"][-1] == launcher.PACKAGE
+    assert (
+        captured["args"][captured["args"].index("--from") + 1] == launcher.REQUIREMENT
+    )
     assert captured["env"]["GOOGLE_ADS_CLIENT_SECRET"] == "test-secret"
     assert "unwanted-setting" not in json.dumps(captured)
     assert capsys.readouterr().out == ""
@@ -52,7 +55,12 @@ def _wheel(directory, version):
     name = "flin_google_keyword_planner_mcp"
     metadata = f"{name}-{version}.dist-info"
     files = {
-        "update_probe.py": f"def main():\n    print({version!r})\n",
+        "update_probe.py": (
+            "import os, json\nfrom pathlib import Path\n"
+            f"def main():\n    print({version!r})\n"
+            "    assert os.environ['GOOGLE_ADS_CLIENT_SECRET'] == 'preserved-secret'\n"
+            "    assert json.loads(Path(os.environ['FLIN_GOOGLE_ADS_TOKEN_FILE']).read_text())['refresh_token'] == 'preserved-token'\n"
+        ),
         f"{metadata}/METADATA": f"Metadata-Version: 2.1\nName: {launcher.PACKAGE}\nVersion: {version}\n",
         f"{metadata}/WHEEL": "Wheel-Version: 1.0\nGenerator: update-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
         f"{metadata}/entry_points.txt": f"[console_scripts]\n{launcher.PACKAGE} = update_probe:main\n",
@@ -102,6 +110,14 @@ def test_new_release_is_used_with_same_cache_and_prereleases_are_skipped(tmp_pat
         for key, value in os.environ.items()
         if not key.startswith(("UV_", "PIP_"))
     }
+    token_file = tmp_path / "oauth-token.json"
+    token_file.write_text(json.dumps({"refresh_token": "preserved-token"}))
+    token_file.chmod(0o600)
+    original_token = token_file.read_bytes()
+    env.update(
+        GOOGLE_ADS_CLIENT_SECRET="preserved-secret",
+        FLIN_GOOGLE_ADS_TOKEN_FILE=str(token_file),
+    )
     env.update(UV_HTTP_TIMEOUT="1", UV_HTTP_RETRIES="0", UV_PYTHON_DOWNLOADS="never")
 
     def run():
@@ -116,19 +132,31 @@ def test_new_release_is_used_with_same_cache_and_prereleases_are_skipped(tmp_pat
         )
 
     try:
-        publish("0.1.0")
+        publish("0.3.1", "0.3.2")
         first = run()
         assert first.returncode == 0, first.stderr
-        assert first.stdout.strip() == "0.1.0"
-        publish("0.1.0", "0.2.0", "0.3.0rc1")
+        assert first.stdout.strip() == "0.3.2"
+        publish("0.3.2", "0.3.4", "0.3.5rc1", "0.4.0", "1.0.0")
         second = run()
         assert second.returncode == 0, second.stderr
-        assert second.stdout.strip() == "0.2.0"
+        assert second.stdout.strip() == "0.3.4"
+        assert token_file.read_bytes() == original_token
+        assert token_file.stat().st_mode & 0o777 == 0o600
         Handler.unavailable = True
         unavailable = run()
         assert unavailable.returncode != 0, (
             "Must not silently run an old cached release"
         )
+        # Explicit, visible operator fallback only; never part of normal startup.
+        fallback = [arg for arg in args if arg != "--refresh"]
+        fallback[fallback.index("--from") + 1] = f"{launcher.PACKAGE}==0.3.4"
+        fallback[2:2] = ["--offline"]
+        pinned = subprocess.run(
+            [uv, *fallback], env=env, capture_output=True, text=True, timeout=30
+        )
+        assert pinned.returncode == 0, pinned.stderr
+        assert pinned.stdout.strip() == "0.3.4"
+        assert token_file.read_bytes() == original_token
     finally:
         server.shutdown()
         server.server_close()

@@ -1,4 +1,4 @@
-"""Launch the latest stable PyPI release on every Claude server start."""
+"""Launch the latest stable release within the tested 0.3 desktop contract."""
 
 from __future__ import annotations
 
@@ -7,6 +7,9 @@ import shutil
 import sys
 
 PACKAGE = "flin-google-keyword-planner-mcp"
+# 0.3 keeps the console entry point, credential fields, token path, and ten
+# original tool input schemas. A new minor line requires explicit review.
+REQUIREMENT = f"{PACKAGE}>=0.3.2,<0.4.0"
 
 
 def tool_args() -> list[str]:
@@ -22,7 +25,9 @@ def tool_args() -> list[str]:
         "--refresh",
         "--python",
         "3.13",
-        f"{PACKAGE}@latest",
+        "--from",
+        REQUIREMENT,
+        PACKAGE,
     ]
 
 
@@ -47,7 +52,8 @@ def main() -> None:
         )
         raise SystemExit(1)
     print(
-        "Checking PyPI for the latest stable Google Keyword Planner server…",
+        "Checking PyPI for the latest stable Google Keyword Planner 0.3.x server. "
+        "No automatic offline fallback; see SUPPORT.md if PyPI is unavailable.",
         file=sys.stderr,
     )
     os.execve(uv, [uv, *tool_args()], runtime_env())

@@ -62,6 +62,8 @@ jobs:
   desktop:
     runs-on: macos-latest
     steps:
+      - name: Confirm Apple Silicon runner
+        run: test "$(uname -m)" = arm64
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -71,4 +73,4 @@ jobs:
       - run: uv run --locked python -m pytest
       - run: npx --yes @anthropic-ai/mcpb@2.1.2 validate manifest.json
       - run: uv run --locked python scripts/build_mcpb.py
-      - run: uv run --locked python scripts/smoke_desktop.py dist/desktop/*.mcpb
+      - run: uv run --locked python scripts/smoke_desktop.py dist/desktop/flin-google-keyword-planner-mcp.mcpb

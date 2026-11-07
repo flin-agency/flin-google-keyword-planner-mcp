@@ -15,6 +15,9 @@ FILES = (
     "uv.lock",
     "README.md",
     "LICENSE",
+    "PRIVACY.md",
+    "SECURITY.md",
+    "SUPPORT.md",
     "docs/claude-desktop-mac.md",
     "desktop/server.py",
     "src/flin_google_ads_mcp/__init__.py",
@@ -43,6 +46,9 @@ def build_bundle(root: Path, output: Path) -> Path:
             archive.writestr(info, source.read_bytes())
     digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
     bundle.with_suffix(".mcpb.sha256").write_text(f"{digest}  {bundle.name}\n")
+    alias = output / f"{manifest['name']}.mcpb"
+    alias.write_bytes(bundle.read_bytes())
+    alias.with_suffix(".mcpb.sha256").write_text(f"{digest}  {alias.name}\n")
     return bundle
 
 

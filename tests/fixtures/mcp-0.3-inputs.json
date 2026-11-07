@@ -1,0 +1,739 @@
+{
+  "google_ads_authorization_url": {
+    "properties": {
+      "redirect_uri": {
+        "default": "http://localhost:8080/",
+        "type": "string"
+      },
+      "state": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "type": "object"
+  },
+  "google_ads_exchange_authorization_code": {
+    "properties": {
+      "code": {
+        "type": "string"
+      },
+      "redirect_uri": {
+        "default": "http://localhost:8080/",
+        "type": "string"
+      }
+    },
+    "required": [
+      "code"
+    ],
+    "type": "object"
+  },
+  "google_ads_start_local_oauth_flow": {
+    "properties": {
+      "redirect_uri": {
+        "default": "http://localhost:8080/",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "google_ads_oauth_status": {
+    "properties": {},
+    "type": "object"
+  },
+  "keyword_ideas_from_keywords": {
+    "properties": {
+      "keywords": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "language_id": {
+        "default": "1000",
+        "type": "string"
+      },
+      "location_ids": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "network": {
+        "default": "GOOGLE_SEARCH_AND_PARTNERS",
+        "type": "string"
+      },
+      "include_adult_keywords": {
+        "default": false,
+        "type": "boolean"
+      },
+      "limit": {
+        "default": 50,
+        "type": "integer"
+      },
+      "page_token": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "keyword_annotation": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "aggregate_metric_types": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "login_customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "include_average_cpc": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "keywords"
+    ],
+    "type": "object"
+  },
+  "keyword_ideas_from_url": {
+    "properties": {
+      "url": {
+        "type": "string"
+      },
+      "customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "language_id": {
+        "default": "1000",
+        "type": "string"
+      },
+      "location_ids": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "network": {
+        "default": "GOOGLE_SEARCH_AND_PARTNERS",
+        "type": "string"
+      },
+      "include_adult_keywords": {
+        "default": false,
+        "type": "boolean"
+      },
+      "limit": {
+        "default": 50,
+        "type": "integer"
+      },
+      "page_token": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "keyword_annotation": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "aggregate_metric_types": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "login_customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "include_average_cpc": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "url"
+    ],
+    "type": "object"
+  },
+  "keyword_ideas_from_keyword_and_url": {
+    "properties": {
+      "keywords": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "url": {
+        "type": "string"
+      },
+      "customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "language_id": {
+        "default": "1000",
+        "type": "string"
+      },
+      "location_ids": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "network": {
+        "default": "GOOGLE_SEARCH_AND_PARTNERS",
+        "type": "string"
+      },
+      "include_adult_keywords": {
+        "default": false,
+        "type": "boolean"
+      },
+      "limit": {
+        "default": 50,
+        "type": "integer"
+      },
+      "page_token": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "keyword_annotation": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "aggregate_metric_types": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "login_customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "include_average_cpc": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "keywords",
+      "url"
+    ],
+    "type": "object"
+  },
+  "keyword_ideas_from_site": {
+    "properties": {
+      "site_url": {
+        "type": "string"
+      },
+      "customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "language_id": {
+        "default": "1000",
+        "type": "string"
+      },
+      "location_ids": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "network": {
+        "default": "GOOGLE_SEARCH_AND_PARTNERS",
+        "type": "string"
+      },
+      "include_adult_keywords": {
+        "default": false,
+        "type": "boolean"
+      },
+      "limit": {
+        "default": 50,
+        "type": "integer"
+      },
+      "page_token": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "keyword_annotation": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "aggregate_metric_types": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "login_customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "include_average_cpc": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "site_url"
+    ],
+    "type": "object"
+  },
+  "keyword_ideas_historical": {
+    "properties": {
+      "keywords": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "start_year": {
+        "type": "integer"
+      },
+      "start_month": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ]
+      },
+      "end_year": {
+        "type": "integer"
+      },
+      "end_month": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ]
+      },
+      "include_average_cpc": {
+        "default": false,
+        "type": "boolean"
+      },
+      "customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "language_id": {
+        "default": "1000",
+        "type": "string"
+      },
+      "location_ids": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "network": {
+        "default": "GOOGLE_SEARCH_AND_PARTNERS",
+        "type": "string"
+      },
+      "include_adult_keywords": {
+        "default": false,
+        "type": "boolean"
+      },
+      "limit": {
+        "default": 50,
+        "type": "integer"
+      },
+      "page_token": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "keyword_annotation": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "aggregate_metric_types": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "login_customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "keywords",
+      "start_year",
+      "start_month",
+      "end_year",
+      "end_month"
+    ],
+    "type": "object"
+  },
+  "keyword_historical_metrics": {
+    "properties": {
+      "keywords": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "language_id": {
+        "default": "1000",
+        "type": "string"
+      },
+      "location_ids": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "network": {
+        "default": "GOOGLE_SEARCH_AND_PARTNERS",
+        "type": "string"
+      },
+      "include_adult_keywords": {
+        "default": false,
+        "type": "boolean"
+      },
+      "start_year": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "start_month": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "end_year": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "end_month": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "include_average_cpc": {
+        "default": false,
+        "type": "boolean"
+      },
+      "login_customer_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "keywords"
+    ],
+    "type": "object"
+  }
+}

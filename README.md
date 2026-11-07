@@ -1,23 +1,68 @@
-# flin-google-keyword-planner-mcp
+# flin Google Keyword Planner MCP
 
-MCP server for Google Ads Keyword Planner ideas.
+Keyword-Ideen und historische Suchvolumen aus Google Ads für Claude Desktop.
+Die Keyword-Tools lesen Daten und verändern keine Kampagnen.
 
-This server exposes focused read-only tools so an LLM can clearly choose the right seed strategy.
+## Start auf einem Mac mit Apple Silicon (M1 oder neuer)
 
-## Claude Desktop auf dem Mac
+1. **[Desktop-Paket herunterladen](https://github.com/flin-agency/flin-google-keyword-planner-mcp/releases/latest/download/flin-google-keyword-planner-mcp.mcpb)**.
+   [Versionierte Downloads und Prüfsummen](https://github.com/flin-agency/flin-google-keyword-planner-mcp/releases) bleiben verfügbar.
+2. In aktuellem Claude Desktop: **Settings → Desktop app → Extensions → Manage →
+   Advanced settings → Install Extension…** und die `.mcpb` auswählen.
+3. Die Pflichtfelder aus dem Passwortmanager eintragen. Die Werte erhältst du vom
+   zuständigen Administrator; keine Zugangsdaten in den Chat kopieren.
+4. Ohne vorhandenen Refresh Token Claude bitten: **«Starte `google_ads_start_local_oauth_flow`.»**
+   Den Google-Link öffnen, das berechtigte Konto wählen und den Zugriff genehmigen.
+5. **«Rufe `connection_status` auf.»** Das prüft die lokale Einrichtung ohne
+   Google-Abfrage. Für einen echten Zugriffstest anschliessend ausdrücklich:
+   **«Prüfe mit `keyword_historical_metrics` das Keyword Wandern, Sprache Deutsch
+   (`1001`), Schweiz (`2756`), Netzwerk `GOOGLE_SEARCH`.»** Dieser Test verwendet
+   Google-Ads-API-Kontingent; Fehler erscheinen als Tool-Ergebnis.
 
-[Installationspaket v0.3.2 herunterladen](https://github.com/flin-agency/flin-google-keyword-planner-mcp/releases/download/v0.3.2/flin-google-keyword-planner-mcp-0.3.2-mac.mcpb)
+| Feld in Claude | Erforderlich? | Bedeutung |
+| --- | --- | --- |
+| Google Ads developer token | Ja | API-Token des berechtigten Managerkontos |
+| OAuth client ID | Ja | Google-Cloud-OAuth-Client, empfohlen: Desktop app |
+| OAuth client secret | Ja | Zum OAuth-Client gehörendes Secret |
+| Google Ads customer ID | Ja im Desktop-Paket | Zielkonto, zehn Ziffern; Bindestriche sind erlaubt |
+| Manager account ID / `login_customer_id` | Nur bei Zugriff über ein MCC | ID des zugriffsberechtigten Managerkontos, nicht automatisch die Zielkonto-ID |
+| Refresh token | Nein | Kann durch den Browser-Login erzeugt werden |
 
-In Claude unter **Settings → Desktop app → Extensions → Manage → Advanced settings →
-Install Extension…** installieren und die Google-Ads-Zugangsdaten eingeben.
-Aktuelles Claude Desktop mit MCPB-0.4-/UV-Unterstützung erforderlich.
-Ab Starter 0.3.2 wird bei jedem Serverstart die neueste stabile PyPI-Version
-geladen. Eine laufende Sitzung benötigt dafür einen Neustart; 0.3.1 muss einmal
-durch das neue Paket ersetzt werden. Internet ist bei jedem Start erforderlich.
-[Schritt-für-Schritt-Anleitung und Sicherheitshinweise](docs/claude-desktop-mac.md).
+`connection_status` zeigt die **tatsächlich laufende `server_version`**.
+`configuration_status=configured` bedeutet nur, dass die lokalen Angaben vorliegen.
+Ein vorhandenes Token ergibt `auth_status=unknown`, nicht eine bestätigte Anmeldung;
+`live_access=not_checked` bleibt beim lokalen Statusaufruf unverändert.
+
+## Updates und Hilfe
+
+Die **Erweiterungsversion** bezeichnet den importierten Starter. Ab Starter 0.3.3
+lädt jeder Serverneustart automatisch die neueste stabile PyPI-Version im geprüften
+Bereich **`>=0.3.2,<0.4.0`** für Python 3.13. Die **Serverversion** kann daher neuer
+sein. Laufende Sitzungen bleiben bestehen, Einstellungen und Token werden nicht
+umgeschrieben. Vorabversionen und die nächste Minor-Version sind ausgeschlossen.
+
+Für die neue Kompatibilitätsgrenze den Starter **einmal neu importieren**; normale
+Serverupdates benötigen danach keinen neuen Import. Starter-/UI-Änderungen können
+einen weiteren Import erfordern. Internet ist beim Start erforderlich. Es gibt
+keinen automatischen Rückfall auf einen alten Cache; der bewusst manuelle Ausweg
+bei einer PyPI-Störung steht in [SUPPORT.md](SUPPORT.md).
+
+Standardwerte sind **Englisch, USA, Google Search mit Partnern**. Für andere Märkte
+Sprache und Region ausdrücklich angeben. Advertising Competition ist
+**Anzeigenwettbewerb, keine organische SEO-Schwierigkeit**. Fehlende Kennzahlen sind
+`null`, nicht 0. Volumen sind Näherungswerte; Google fasst ähnliche Varianten zusammen.
+
+[Ausführliche Mac-Anleitung](docs/claude-desktop-mac.md) ·
+[Datenschutz](PRIVACY.md) · [Sicherheit](SECURITY.md) · [Hilfe](SUPPORT.md)
+
+Das Python-Paket unterstützt weiterhin Python 3.10+ auf anderen geeigneten Systemen;
+Intel-Macs werden durch das plattformneutrale Paket nicht ausgeschlossen. Die
+Apple-Silicon-Prüfung ist unten von Linux-Tests und echten Kontotests getrennt.
+Entwicklerinstallation und manuelle JSON-Konfiguration folgen weiter unten.
 
 ## Exposed MCP tools
 
+- `connection_status` — local setup and running version; no browser or API request
 - `keyword_ideas_from_keywords`
 - `keyword_ideas_from_url`
 - `keyword_ideas_from_keyword_and_url`
@@ -119,7 +164,7 @@ not evidence of zero search volume. Pagination and idea annotations do not apply
 
 ## Requirements
 
-1. Python 3.10+
+1. Python 3.10+ for manual/developer installation; Claude Desktop manages Python 3.13
 2. Google Ads API credentials:
 - `GOOGLE_ADS_DEVELOPER_TOKEN`
 - `GOOGLE_ADS_CLIENT_ID`
@@ -150,13 +195,13 @@ uv run --env-file .env flin-google-keyword-planner-mcp
   "mcpServers": {
     "flin-google-keyword-planner-mcp": {
       "command": "uvx",
-      "args": ["flin-google-keyword-planner-mcp@latest"],
+      "args": ["--refresh", "--prerelease", "disallow", "--from", "flin-google-keyword-planner-mcp>=0.3.2,<0.4.0", "flin-google-keyword-planner-mcp"],
       "env": {
         "GOOGLE_ADS_DEVELOPER_TOKEN": "REPLACE_ME",
         "GOOGLE_ADS_CLIENT_ID": "REPLACE_ME",
         "GOOGLE_ADS_CLIENT_SECRET": "REPLACE_ME",
         "GOOGLE_ADS_CUSTOMER_ID": "1234567890",
-        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "1234567890",
+        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "",
         "GOOGLE_ADS_USE_PROTO_PLUS": "true"
       }
     }
@@ -182,13 +227,15 @@ uv run --env-file .env flin-google-keyword-planner-mcp
         "GOOGLE_ADS_CLIENT_ID": "REPLACE_ME",
         "GOOGLE_ADS_CLIENT_SECRET": "REPLACE_ME",
         "GOOGLE_ADS_CUSTOMER_ID": "1234567890",
-        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "1234567890",
+        "GOOGLE_ADS_LOGIN_CUSTOMER_ID": "",
         "GOOGLE_ADS_USE_PROTO_PLUS": "true"
       }
     }
   }
 }
 ```
+
+Leave `GOOGLE_ADS_LOGIN_CUSTOMER_ID` blank unless access goes through an MCC; then use the manager account ID. The manual server also accepts `customer_id` per query if no default is set.
 
 Restart Claude Desktop after config changes.
 

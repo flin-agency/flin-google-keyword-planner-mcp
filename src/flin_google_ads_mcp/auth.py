@@ -191,7 +191,7 @@ def get_refresh_token_source() -> str | None:
         return "runtime"
     if load_persisted_refresh_token():
         return "file"
-    if os.getenv("GOOGLE_ADS_REFRESH_TOKEN"):
+    if (os.getenv("GOOGLE_ADS_REFRESH_TOKEN") or "").strip():
         return "env"
     return None
 
