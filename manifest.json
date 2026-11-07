@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "flin-google-keyword-planner-mcp",
   "display_name": "flin Google Keyword Planner",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Read-only Google Ads keyword ideas and historical search metrics for Claude Desktop on Mac.",
   "author": {
     "name": "flin.agency",

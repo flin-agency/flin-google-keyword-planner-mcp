@@ -53,8 +53,8 @@ MONTH_NUMBER_TO_NAME = {
 
 MONTH_NAME_TO_NUMBER = {name: number for number, name in MONTH_NUMBER_TO_NAME.items()}
 
-DEFAULT_LANGUAGE_ID = "1000"
-DEFAULT_LOCATION_IDS = ("2840",)
+DEFAULT_LANGUAGE_ID = "1001"  # German
+DEFAULT_LOCATION_IDS = ("2756",)  # Switzerland
 
 
 def normalize_customer_id(raw_customer_id: str) -> str:

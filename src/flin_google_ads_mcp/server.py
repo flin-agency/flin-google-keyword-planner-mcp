@@ -16,6 +16,7 @@ from .auth import (
 )
 from .config import ConfigurationError, load_settings
 from .google_ads import (
+    DEFAULT_LANGUAGE_ID,
     format_google_ads_error,
     generate_keyword_historical_metrics,
     generate_keyword_ideas,
@@ -29,7 +30,7 @@ mcp = FastMCP(
         "Google Ads Keyword Planner MCP. "
         "OAuth setup helpers, five keyword ideas tools, and historical metrics for existing keywords. "
         "Competition is advertising competition, not organic SEO difficulty. Missing metrics are null. "
-        "Defaults are English and US; explicitly set targeting for other markets."
+        "Defaults are German and Switzerland; explicitly set targeting for other markets."
     ),
 )
 
@@ -221,7 +222,7 @@ def google_ads_oauth_status() -> dict[str, Any]:
 def keyword_ideas_from_keywords(
     keywords: list[str],
     customer_id: str | None = None,
-    language_id: str = "1000",
+    language_id: str = DEFAULT_LANGUAGE_ID,
     location_ids: list[str] | None = None,
     network: str = "GOOGLE_SEARCH_AND_PARTNERS",
     include_adult_keywords: bool = False,
@@ -258,7 +259,7 @@ def keyword_ideas_from_keywords(
 def keyword_ideas_from_url(
     url: str,
     customer_id: str | None = None,
-    language_id: str = "1000",
+    language_id: str = DEFAULT_LANGUAGE_ID,
     location_ids: list[str] | None = None,
     network: str = "GOOGLE_SEARCH_AND_PARTNERS",
     include_adult_keywords: bool = False,
@@ -296,7 +297,7 @@ def keyword_ideas_from_keyword_and_url(
     keywords: list[str],
     url: str,
     customer_id: str | None = None,
-    language_id: str = "1000",
+    language_id: str = DEFAULT_LANGUAGE_ID,
     location_ids: list[str] | None = None,
     network: str = "GOOGLE_SEARCH_AND_PARTNERS",
     include_adult_keywords: bool = False,
@@ -334,7 +335,7 @@ def keyword_ideas_from_keyword_and_url(
 def keyword_ideas_from_site(
     site_url: str,
     customer_id: str | None = None,
-    language_id: str = "1000",
+    language_id: str = DEFAULT_LANGUAGE_ID,
     location_ids: list[str] | None = None,
     network: str = "GOOGLE_SEARCH_AND_PARTNERS",
     include_adult_keywords: bool = False,
@@ -376,7 +377,7 @@ def keyword_ideas_historical(
     end_month: str | int,
     include_average_cpc: bool = False,
     customer_id: str | None = None,
-    language_id: str = "1000",
+    language_id: str = DEFAULT_LANGUAGE_ID,
     location_ids: list[str] | None = None,
     network: str = "GOOGLE_SEARCH_AND_PARTNERS",
     include_adult_keywords: bool = False,
@@ -416,7 +417,7 @@ def keyword_ideas_historical(
 def keyword_historical_metrics(
     keywords: list[str],
     customer_id: str | None = None,
-    language_id: str = "1000",
+    language_id: str = DEFAULT_LANGUAGE_ID,
     location_ids: list[str] | None = None,
     network: str = "GOOGLE_SEARCH_AND_PARTNERS",
     include_adult_keywords: bool = False,
@@ -431,7 +432,7 @@ def keyword_historical_metrics(
 
     Google may combine close variants. Omit dates for the default past 12 months;
     otherwise supply all four date fields. Unmatched keywords are not assumed zero.
-    Defaults: English, US, Search and Partners. Use location_ids=[] for all locations.
+    Defaults: German, Switzerland, Search and Partners. Use location_ids=[] for all locations.
     """
     try:
         resolved_customer_id = resolve_customer_id(customer_id, load_settings())

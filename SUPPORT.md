@@ -12,8 +12,8 @@
    Für echte Kontoberechtigungen ist eine ausdrücklich ausgelöste Keyword-Abfrage
    nötig. Der Standardstatus bleibt `live_access=not_checked`.
 
-Fehlende Daten (`null`) sind nicht null Suchanfragen. Standardwerte sind Englisch,
-USA und Search mit Partnern; Sprache und Region für deinen Test ausdrücklich setzen.
+Fehlende Daten (`null`) sind nicht null Suchanfragen. Ab Server 0.3.4 sind die Standardwerte Deutsch,
+Schweiz und Search mit Partnern. Für andere Märkte Sprache und Region ausdrücklich setzen.
 Google kontrolliert Datenverfügbarkeit, Konto-Zulassung, Kontingente und Gruppierung
 ähnlicher Begriffe. Ein Fehler beim Zugriff kann trotz lokal vorhandener Tokens auftreten.
 
@@ -29,7 +29,7 @@ fest auswählen, zum Beispiel in der [manuellen Konfiguration](README.md#claude-
 
 ```json
 "command": "uv",
-"args": ["tool", "run", "--offline", "--from", "flin-google-keyword-planner-mcp==0.3.3", "flin-google-keyword-planner-mcp"]
+"args": ["tool", "run", "--offline", "--from", "flin-google-keyword-planner-mcp==0.3.4", "flin-google-keyword-planner-mcp"]
 ```
 
 Die vorhandenen Credential-Felder beibehalten. Das funktioniert nur, wenn diese

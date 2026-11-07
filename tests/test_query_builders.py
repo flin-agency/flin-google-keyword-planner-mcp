@@ -107,7 +107,7 @@ def test_build_language_constant_resource_name_uses_digits() -> None:
 
 
 def test_build_geo_target_constant_resource_names_defaults_to_us() -> None:
-    assert build_geo_target_constant_resource_names(None) == ["geoTargetConstants/2840"]
+    assert build_geo_target_constant_resource_names(None) == ["geoTargetConstants/2756"]
 
 
 def test_build_geo_target_constant_resource_names_normalizes_ids() -> None:

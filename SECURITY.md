@@ -16,8 +16,11 @@ Zur Dateispeicherung und Löschung siehe [PRIVACY.md](PRIVACY.md).
 Starter ab 0.3.3 erlauben stabile Serverversionen `>=0.3.2,<0.4.0` mit Python 3.13.
 Diese Grenze bezieht sich auf den unveränderten Programmeinstieg, die bestehenden
 Credential-Felder, Token-Speicherung und die zehn bisherigen Tool-Eingabeschemas.
-Regressionstests vergleichen diese Schemas; Tests für Keyword-Ergebnisse bleiben
-bestehen. Ein nächster Minor-Release erfordert eine neue Kompatibilitätsprüfung.
+Regressionstests vergleichen diese Schemas. Die gezielte Ausnahme ab Server 0.3.4
+ist die gewünschte Änderung der Standardausrichtung auf Deutsch/Schweiz. Abfragen
+ohne Sprache und Region verwenden damit einen anderen Markt; explizite Zielwerte
+bleiben wirksam. Tests prüfen beide Fälle sowie die Keyword-Ergebnisse.
+Ein nächster Minor-Release erfordert eine neue Kompatibilitätsprüfung.
 Die Grenze ist keine Garantie für beliebigen zukünftigen Code: Updates vertrauen
 dem PyPI-Projekt und dessen Abhängigkeiten. Vorabversionen sind ausgeschlossen.
 

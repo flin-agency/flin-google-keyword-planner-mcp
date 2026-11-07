@@ -57,8 +57,8 @@ Falls Port 8080 belegt ist, kann ein Desktop-Client
 «Prüfe historische Suchvolumen für `Wandern Schweiz` und `Wandern Zürich`,
 Sprache Deutsch (`1001`), Schweiz (`2756`), nur Google Search.»
 
-Die Standardwerte des Servers sind Englisch und USA; Schweizer Auswertungen
-müssen das Zielgebiet ausdrücklich setzen. Wettbewerb meint Anzeigenwettbewerb,
+Ab Server 0.3.4 sind Deutsch (`1001`) und Schweiz (`2756`) voreingestellt.
+Für andere Märkte Sprache und Region ausdrücklich setzen. Wettbewerb meint Anzeigenwettbewerb,
 nicht organische SEO-Schwierigkeit.
 
 ## Updates und Fehler

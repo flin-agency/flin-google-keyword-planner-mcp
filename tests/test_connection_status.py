@@ -129,6 +129,11 @@ def test_existing_03_tool_interfaces_and_local_status_annotations():
         (Path(__file__).parent / "fixtures/mcp-0.3-inputs.json").read_text()
     )
     for name, schema in baseline.items():
+        # 0.3.4 deliberately changes the target market to German Switzerland.
+        # Keep the historical baseline and check every other schema field exactly.
+        if "language_id" in schema["properties"]:
+            assert schema["properties"]["language_id"]["default"] == "1000"
+            schema["properties"]["language_id"]["default"] = "1001"
         assert clean(tools[name].inputSchema) == schema, name
     annotations = tools["connection_status"].annotations
     assert annotations.readOnlyHint and annotations.idempotentHint

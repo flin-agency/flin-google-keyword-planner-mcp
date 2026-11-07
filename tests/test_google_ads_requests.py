@@ -32,6 +32,50 @@ def message(client, name, values):
     return value
 
 
+@pytest.mark.parametrize("endpoint", ["ideas", "historical"])
+@pytest.mark.parametrize(
+    "targeting,language,locations",
+    [
+        ({}, "1001", ["2756"]),
+        ({"language_id": "1000", "location_ids": ["2840"]}, "1000", ["2840"]),
+    ],
+    ids=["german-switzerland-default", "explicit-english-us"],
+)
+def test_default_market_and_explicit_override(
+    sdk, endpoint, targeting, language, locations
+):
+    client, service = sdk
+    if endpoint == "ideas":
+        service.generate_keyword_ideas.return_value = SimpleNamespace(
+            pages=iter([message(client, "GenerateKeywordIdeaResponse", {})])
+        )
+        result = ads.generate_keyword_ideas(
+            customer_id="1234567890",
+            seed_mode="keywords",
+            keywords=["wandern"],
+            **targeting,
+        )
+        request = service.generate_keyword_ideas.call_args.kwargs["request"]
+    else:
+        service.generate_keyword_historical_metrics.return_value = message(
+            client, "GenerateKeywordHistoricalMetricsResponse", {}
+        )
+        result = ads.generate_keyword_historical_metrics(
+            customer_id="1234567890",
+            keywords=["wandern"],
+            **targeting,
+        )
+        request = service.generate_keyword_historical_metrics.call_args.kwargs[
+            "request"
+        ]
+    assert request.language == f"languageConstants/{language}"
+    assert list(request.geo_target_constants) == [
+        f"geoTargetConstants/{location}" for location in locations
+    ]
+    assert result["targeting"]["language"] == request.language
+    assert result["targeting"]["locations"] == list(request.geo_target_constants)
+
+
 @pytest.mark.parametrize(
     "mode,seed",
     [

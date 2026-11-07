@@ -47,8 +47,8 @@ einen weiteren Import erfordern. Internet ist beim Start erforderlich. Es gibt
 keinen automatischen Rückfall auf einen alten Cache; der bewusst manuelle Ausweg
 bei einer PyPI-Störung steht in [SUPPORT.md](SUPPORT.md).
 
-Standardwerte sind **Englisch, USA, Google Search mit Partnern**. Für andere Märkte
-Sprache und Region ausdrücklich angeben. Advertising Competition ist
+Ab Server 0.3.4 sind die Standardwerte **Deutsch, Schweiz, Google Search mit Partnern**.
+Für andere Märkte Sprache und Region ausdrücklich angeben. Advertising Competition ist
 **Anzeigenwettbewerb, keine organische SEO-Schwierigkeit**. Fehlende Kennzahlen sind
 `null`, nicht 0. Volumen sind Näherungswerte; Google fasst ähnliche Varianten zusammen.
 
@@ -118,8 +118,8 @@ Historical option:
 ## Common optional parameters (keyword idea tools)
 
 - `customer_id`
-- `language_id` (default `1000`)
-- `location_ids` (default `2840` = US; `[]` = all locations; max 10 unique IDs)
+- `language_id` (default `1001` = German)
+- `location_ids` (default `2756` = Switzerland; `[]` = all locations; max 10 unique IDs)
 - `network` (`GOOGLE_SEARCH` or `GOOGLE_SEARCH_AND_PARTNERS`; default includes partners)
 - `include_adult_keywords` (default `false`)
 - `limit` (page size: default `50`, max `1000`; Google may return fewer rows)
@@ -147,8 +147,9 @@ not evidence of zero search volume. Pagination and idea annotations do not apply
 
 ## Data interpretation and targeting
 
-- Defaults remain **English / US / Search and Partners** for compatibility. For
-  German Switzerland, explicitly pass `language_id="1001"`, `location_ids=["2756"]`.
+- Since server 0.3.4, defaults are **German / Switzerland / Search and Partners**.
+  This intentionally changes requests with omitted targeting from English/US.
+  To keep English/US targeting, pass `language_id="1000"`, `location_ids=["2840"]`.
   Use `network="GOOGLE_SEARCH"` for Google Search alone.
 - Responses echo their targeting. Bid amounts and CPC use the Google Ads customer
   account's currency; do not assume USD or CHF from the target location.
@@ -323,7 +324,8 @@ permissions. The manual code-copy fallback remains available.
 
 Clients upgrading from 0.2.x must accept nullable metrics, the additional response
 metadata, and the removal of `refresh_token` from the OAuth exchange response.
-Existing five idea tool names and targeting defaults are retained.
+Existing five idea tool names are retained. Since 0.3.4, omitted targeting defaults
+to German/Switzerland; explicit targeting continues to override these defaults.
 
 Reference: [Google historical metrics](https://developers.google.com/google-ads/api/docs/keyword-planning/generate-historical-metrics),
 [Google keyword ideas](https://developers.google.com/google-ads/api/docs/keyword-planning/generate-keyword-ideas),
