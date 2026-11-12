@@ -35,6 +35,25 @@ _local_flow: LocalAuthorizationFlow | None = None
 TokenRequest = Callable[[dict[str, str]], Mapping[str, Any]]
 
 
+class OAuthFlowError(ConfigurationError):
+    """An OAuth failure with an application-owned, secret-free message."""
+
+
+def _token_error_message(response: Mapping[str, Any]) -> str:
+    # Never reflect Google's error_description or arbitrary error values.
+    messages = {
+        "invalid_grant": "Google OAuth rejected the code (invalid_grant). Start a new OAuth flow; the code may be expired, already used, or not match the redirect URI or PKCE verifier.",
+        "invalid_client": "Google OAuth rejected the client (invalid_client). Check the client ID and client secret belong to the same OAuth client.",
+        "unauthorized_client": "Google OAuth rejected this client for code exchange (unauthorized_client). Check the OAuth client configuration.",
+        "redirect_uri_mismatch": "Google OAuth rejected the redirect URI (redirect_uri_mismatch). Check the OAuth client's redirect URI.",
+        "invalid_scope": "Google OAuth rejected the requested scope (invalid_scope). Check Google Ads OAuth access.",
+    }
+    error = response.get("error")
+    if isinstance(error, str) and error in messages:
+        return messages[error]
+    return "Google OAuth token exchange failed. Check the OAuth client and use a fresh code."
+
+
 @dataclass
 class LocalAuthorizationFlow:
     server: ThreadingHTTPServer
@@ -65,7 +84,6 @@ def build_authorization_url(
         "scope": GOOGLE_ADS_SCOPE,
         "access_type": "offline",
         "prompt": "consent",
-        "include_granted_scopes": "true",
     }
     if state:
         params["state"] = state.strip()
@@ -208,14 +226,22 @@ def _request_google_token(payload: dict[str, str]) -> Mapping[str, Any]:
         with urlopen(request, timeout=30) as response:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
-        raise ConfigurationError(
+        try:
+            error_response = json.loads(exc.read().decode("utf-8"))
+        except (OSError, UnicodeError, ValueError):
+            error_response = None
+        if isinstance(error_response, dict) and "error" in error_response:
+            raise OAuthFlowError(_token_error_message(error_response)) from exc
+        raise OAuthFlowError(
             f"Google OAuth token exchange failed with HTTP {exc.code}. "
             "Check the OAuth client and generate a fresh authorization code."
         ) from exc
-    except URLError as exc:
-        raise ConfigurationError(
+    except (URLError, TimeoutError) as exc:
+        raise OAuthFlowError(
             "Google OAuth token endpoint could not be reached."
         ) from exc
+    except (UnicodeError, ValueError) as exc:
+        raise OAuthFlowError("Google OAuth returned an invalid token response.") from exc
 
 
 def exchange_authorization_code(
@@ -241,19 +267,25 @@ def exchange_authorization_code(
         payload["code_verifier"] = code_verifier
     response = (token_request or _request_google_token)(payload)
 
+    if not isinstance(response, Mapping):
+        raise OAuthFlowError("Google OAuth returned an invalid token response.")
     if "error" in response:
-        raise ConfigurationError(
-            "Google OAuth token exchange failed. Check the OAuth client and use a fresh code."
-        )
+        raise OAuthFlowError(_token_error_message(response))
 
     refresh_token = response.get("refresh_token")
-    if not isinstance(refresh_token, str):
-        raise ConfigurationError(
+    if not isinstance(refresh_token, str) or not refresh_token.strip():
+        raise OAuthFlowError(
             "Google OAuth response did not contain a refresh token. "
             "Generate a fresh authorization URL and approve offline access again."
         )
 
-    return set_runtime_refresh_token(refresh_token)
+    try:
+        return set_runtime_refresh_token(refresh_token)
+    except OSError as exc:
+        raise OAuthFlowError(
+            "Google OAuth succeeded, but the refresh token could not be saved. "
+            "Check permissions and free space for FLIN_GOOGLE_ADS_TOKEN_FILE, then start a new OAuth flow."
+        ) from exc
 
 
 def _normalize_loopback_redirect_uri(redirect_uri: str) -> tuple[str, str, int, str]:
@@ -338,10 +370,12 @@ def start_local_authorization_flow(
                 flow.timer.cancel()
             try:
                 if params.get("error"):
-                    raise ConfigurationError(
+                    raise OAuthFlowError(
                         "Google OAuth authorization failed. Start a new authorization flow."
                     )
                 code = params.get("code", [""])[0]
+                if not code.strip():
+                    raise OAuthFlowError("Google OAuth callback did not contain a code. Start a new OAuth flow.")
                 exchange_authorization_code(
                     code=code,
                     client_id=settings.client_id,
@@ -354,9 +388,12 @@ def start_local_authorization_flow(
                 flow.token_available = True
                 body = "Authentication complete. You may close this browser tab."
                 self.send_response(200)
-            except Exception:
+            except Exception as exc:
                 flow.status = "error"
-                flow.error = "Authentication failed. Check credentials and start a new OAuth flow."
+                flow.error = (
+                    str(exc) if isinstance(exc, OAuthFlowError)
+                    else "Authentication failed. Check credentials and start a new OAuth flow."
+                )
                 body = "Authentication failed. Check OAuth status in your MCP client."
                 self.send_response(400)
 

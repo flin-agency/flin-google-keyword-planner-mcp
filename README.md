@@ -260,6 +260,17 @@ If you cannot use the local callback flow, use the manual fallback:
 
 The exchanged refresh token is stored outside Claude config in `~/.config/flin-google-keyword-planner-mcp/oauth-token.json` and reused after MCP restarts. Override the storage path with `FLIN_GOOGLE_ADS_TOKEN_FILE` if needed.
 
+If the browser reports `Authentication failed`, run `google_ads_oauth_status` for
+the failure reason. It distinguishes rejected codes/clients, connectivity problems,
+missing refresh tokens and token-file write failures without returning secrets or
+Google's raw error descriptions. Start a new flow after correcting the cause;
+authorization codes cannot be reused. `token_available=true` alone can refer to an
+older saved token and does not confirm the latest login succeeded.
+
+Authorization requests only the Google Ads scope and does not opt into combining
+previously granted scopes. Code exchange uses Python's HTTP client directly, not
+oauthlib's scope validation, so `OAUTHLIB_RELAX_TOKEN_SCOPE` does not affect this flow.
+
 ## Security
 
 - Never commit real credentials to git.

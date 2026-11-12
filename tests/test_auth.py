@@ -67,6 +67,7 @@ def test_build_authorization_url_requests_offline_google_ads_access() -> None:
     assert params["redirect_uri"] == ["http://localhost:8080/"]
     assert params["response_type"] == ["code"]
     assert params["scope"] == [GOOGLE_ADS_SCOPE]
+    assert "include_granted_scopes" not in params
     assert params["access_type"] == ["offline"]
     assert params["prompt"] == ["consent"]
     assert params["state"] == ["csrf-token"]
@@ -388,3 +389,67 @@ def test_local_flow_expires(monkeypatch):
     ):
         time.sleep(0.01)
     assert get_local_authorization_flow_status()["status"] == "expired"
+
+
+def test_exchange_accepts_additional_granted_scopes():
+    assert exchange_authorization_code(
+        code="code",
+        client_id="id",
+        client_secret="secret",
+        token_request=lambda _: {
+            "refresh_token": "token",
+            "scope": GOOGLE_ADS_SCOPE + " https://www.googleapis.com/auth/analytics.readonly",
+        },
+    ) == "token"
+
+
+@pytest.mark.parametrize(
+    "failure, expected",
+    [
+        ("invalid_grant", "invalid_grant"),
+        ("invalid_client", "invalid_client"),
+        ("missing_token", "did not contain a refresh token"),
+        ("persistence", "could not be saved"),
+        ("network", "could not be reached"),
+        ("malformed", "invalid token response"),
+        ("unknown", "token exchange failed with HTTP 400"),
+        ("unexpected", "Authentication failed"),
+    ],
+)
+def test_callback_reports_safe_failure_reason(monkeypatch, failure, expected):
+    from io import BytesIO
+    from urllib.error import HTTPError, URLError
+    from flin_google_ads_mcp import auth
+
+    def fake_urlopen(*args, **kwargs):
+        if failure == "network":
+            raise URLError("private-secret")
+        if failure == "unexpected":
+            raise RuntimeError("private-secret")
+        if failure == "unknown":
+            raise HTTPError("https://example.com", 400, "private-secret", {}, BytesIO(b"private-secret"))
+        if failure in {"invalid_grant", "invalid_client"}:
+            body = json.dumps({"error": failure, "error_description": "private-secret"}).encode()
+            raise HTTPError("https://example.com", 400, "private-secret", {}, BytesIO(body))
+        if failure == "malformed":
+            return BytesIO(b"[]")
+        if failure == "missing_token":
+            return BytesIO(b'{"access_token": "private-secret"}')
+        return BytesIO(b'{"refresh_token": "private-secret"}')
+
+    monkeypatch.setattr(auth, "urlopen", fake_urlopen)
+    if failure == "persistence":
+        def fail_save(_):
+            raise PermissionError("private-secret")
+        monkeypatch.setattr(auth, "persist_refresh_token", fail_save)
+
+    flow = start_local_authorization_flow(settings=_settings(), redirect_uri="http://127.0.0.1:0/")
+    with pytest.raises(HTTPError) as error:
+        urlopen(flow["redirect_uri"] + "?state=" + flow["state"] + "&code=code", timeout=5)
+    assert error.value.code == 400
+    assert "private-secret" not in error.value.read().decode()
+    status = get_local_authorization_flow_status()
+    assert status["status"] == "error"
+    assert expected in status["error"]
+    assert "private-secret" not in json.dumps(status)
+    assert status["token_available"] is False
