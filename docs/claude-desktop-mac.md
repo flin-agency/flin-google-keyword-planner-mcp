@@ -6,9 +6,9 @@
    Manage → Advanced settings → Install Extension…**. In älteren Oberflächen
    findest du den Bereich direkt unter **Settings → Extensions**.
 3. Wähle die `.mcpb`-Datei aus und bestätige die Installation.
-4. Trage die Werte vom zuständigen Administrator/Passwortmanager ein: Developer Token, OAuth Client ID, OAuth Client Secret und Google Ads
+4. Trage die Werte vom zuständigen Administrator/Passwortmanager ein: OAuth Client ID, OAuth Client Secret und Google Ads
    Customer ID ein. Bei einem Managerkonto zusätzlich die Login Customer ID.
-   Ein vorhandener Refresh Token ist optional.
+   Die Anmeldung erfolgt anschliessend im Browser; alte Tokens werden nicht übernommen.
 5. Bitte Claude: «Starte `google_ads_start_local_oauth_flow` für Google Ads.»
    Öffne den ausgegebenen Google-Link, melde dich an und genehmige den Zugriff.
    Danach zeigt `connection_status` die lokale Einrichtung und laufende Serverversion.
@@ -21,21 +21,29 @@ Web-Client muss die verwendete Redirect URI (standardmässig
 Falls Port 8080 belegt ist, kann ein Desktop-Client
 `redirect_uri="http://127.0.0.1:0/"` verwenden; der Server wählt dann einen freien Port.
 
+## Umstieg von 0.3
+
+Das neue 0.4-Paket einmal importieren und den Browser-Login erneut durchführen.
+Alte Token-Dateien und importierte Refresh Tokens werden nicht übernommen.
+Neue Anmeldungen bleiben anschliessend über Neustarts erhalten.
+Das Desktop-Paket funktioniert erst nach Veröffentlichung von 0.4.0 auf PyPI.
+
 ## Voraussetzungen
 
 - Aktuelles Claude Desktop für macOS mit MCPB-0.4-/UV-Runtime-Unterstützung;
   gegebenenfalls müssen Unternehmensrichtlinien eigene Erweiterungen erlauben.
 - Internet bei jedem Serverstart: Claude/UV stellt Python 3.13 bereit. Der Starter
-  lädt die neueste stabile Version im Bereich `>=0.3.2,<0.4.0` von PyPI.
+  lädt die neueste stabile Version im Bereich `>=0.4.0,<0.5.0` von PyPI.
   Das Paket enthält keine native
   Mac-Binärdatei und verwendet passende Abhängigkeiten für Apple Silicon bzw. Intel.
-- Google Ads API Developer Token, OAuth-Client und Zugriff auf das Ads-Konto.
+- OAuth-Client aus einem Google-Cloud-Projekt mit Basic- oder Standardzugriff
+  auf die Google Ads API sowie Zugriff auf das Ads-Konto.
   Einschränkungen oder Freigaben seitens Google gelten weiterhin.
 
 ## Sicherheit und Daten
 
-- Developer Token, Client Secret und optionaler Refresh Token sind als sensible
-  Einstellungen markiert. Ihre Speicherung übernimmt Claude; dies ist keine
+- Das Client Secret ist als sensible Einstellung markiert.
+  Seine Speicherung übernimmt Claude; dies ist keine
   pauschale Verschlüsselungszusage. Gib sie in den Einstellungen ein, nicht im Chat.
 - Bei der Browser-Anmeldung speichert der Server den Refresh Token separat unter
   `~/.config/flin-google-keyword-planner-mcp/oauth-token.json`, atomar und mit
@@ -64,10 +72,10 @@ nicht organische SEO-Schwierigkeit.
 ## Updates und Fehler
 
 **Normale Serverupdates werden weiterhin automatisch von PyPI übernommen.**
-Ab Starter 0.3.3 gilt die ausdrücklich geprüfte 0.3-Schnittstelle: `>=0.3.2,<0.4.0`.
+Ab Starter 0.4.0 gilt die ausdrücklich geprüfte 0.4-Schnittstelle: `>=0.4.0,<0.5.0`.
 Die ausdrückliche Cache-Aktualisierung wählt bei jedem Start die neueste stabile
 Version innerhalb dieser Grenze. Vorabversionen werden ausgeschlossen. Der Test
-prüft sowohl neue Patch-Releases als auch den Ausschluss von 0.4 und 1.0.
+prüft sowohl neue Patch-Releases als auch den Ausschluss von 0.5 und 1.0.
 Die Erweiterungsversion in Claude bezeichnet den Starter; `connection_status`
 zeigt dagegen die tatsächlich laufende Serverversion.
 Die mitgelieferten Quellen und `uv.lock` sind ein Referenzstand für Entwicklung und
@@ -78,11 +86,10 @@ Veröffentlichung eines Updates genügt ein Serverneustart oder das vollständig
 Beenden und erneute Öffnen von Claude. Ohne erreichbaren Paketindex kann der Start
 fehlschlagen; es gibt keinen stillen Rückfall auf eine alte Version.
 
-**Einmalige Umstellung:** Wer einen Starter vor 0.3.3 verwendet, muss das neue
-`.mcpb` einmal importieren, um die Kompatibilitätsgrenze zu übernehmen. Ein 0.3.2-
-Starter kann bereits den neuen Server laden, erhält aber nicht automatisch die
-neue Starterlogik. Konfigurationsschlüssel, Erweiterungs-ID und Token-Pfad bleiben
-unverändert; der Starter schreibt sie beim Serverupdate nicht um.
+**Einmalige Umstellung:** Wer einen 0.3-Starter verwendet, muss das neue
+`.mcpb` importieren und sich neu anmelden. Die Erweiterungs-ID und der Token-Pfad
+bleiben gleich; die alten Token-Eingabefelder entfallen. Nur eine erfolgreiche
+neue Anmeldung ersetzt die alte Token-Datei.
 Danach benötigen normale PyPI-Serverupdates keine neue `.mcpb`-Installation.
 Änderungen am Starter selbst, an Pflichtfeldern oder an der unterstützten Python-
 Laufzeit können weiterhin eine neue Erweiterung erfordern.

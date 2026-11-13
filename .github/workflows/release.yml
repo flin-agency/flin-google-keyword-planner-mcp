@@ -99,7 +99,7 @@ jobs:
       - run: uv run --locked python -m pytest
       - run: npx --yes @anthropic-ai/mcpb@2.1.2 validate manifest.json
       - run: uv run --locked python scripts/build_mcpb.py
-      - run: uv run --locked python scripts/smoke_desktop.py dist/desktop/flin-google-keyword-planner-mcp.mcpb
+      - run: uv run --locked python scripts/smoke_desktop.py dist/desktop/flin-google-keyword-planner-mcp.mcpb --local-source
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-bundle

@@ -50,18 +50,18 @@ def test_manifest_runs_independent_launcher_and_protects_secret_fields():
     args = manifest["server"]["mcp_config"]["args"]
     assert "--no-project" in args and "--no-config" in args
     assert "--locked" not in args
-    for field in ("developer_token", "client_secret", "refresh_token"):
+    for field in ("client_secret",):
         assert manifest["user_config"][field]["sensitive"] is True
         assert field not in " ".join(args)
 
 
-def test_03_extension_settings_identity_and_token_location_remain_compatible():
+def test_04_extension_settings_remove_legacy_credentials():
     from flin_google_ads_mcp.auth import DEFAULT_TOKEN_FILE
 
     manifest = json.loads((ROOT / "manifest.json").read_text())
     assert manifest["name"] == "flin-google-keyword-planner-mcp"
-    required = {"developer_token", "client_id", "client_secret", "customer_id"}
-    optional = {"login_customer_id", "refresh_token"}
+    required = {"client_id", "client_secret", "customer_id"}
+    optional = {"login_customer_id"}
     assert set(manifest["user_config"]) == required | optional
     for field in required | optional:
         assert manifest["user_config"][field]["required"] == (field in required)

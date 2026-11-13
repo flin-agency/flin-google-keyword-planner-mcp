@@ -17,7 +17,7 @@ def test_library_exceptions_do_not_disclose_credentials(error):
 
 def test_settings_repr_hides_secrets():
     settings = Settings(
-        "dev-secret", "client", "client-secret", "refresh-secret", None, None, True
+        "client", "client-secret", None, None, True
     )
     assert "secret" not in repr(settings)
 
@@ -87,7 +87,7 @@ def test_callback_does_not_reflect_untrusted_errors(monkeypatch, tmp_path):
     monkeypatch.setenv(auth.TOKEN_FILE_ENV_VAR, str(tmp_path / "token.json"))
     monkeypatch.setattr(auth, "_local_flow", None)
     flow = auth.start_local_authorization_flow(
-        settings=Settings("dev", "id", "secret", None, None, None, True),
+        settings=Settings("id", "secret", None, None, True),
         redirect_uri="http://127.0.0.1:0/",
     )
     try:

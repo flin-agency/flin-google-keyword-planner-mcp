@@ -13,9 +13,10 @@ Zur Dateispeicherung und Löschung siehe [PRIVACY.md](PRIVACY.md).
 
 ## Updates und Prüfumfang
 
-Starter ab 0.3.3 erlauben stabile Serverversionen `>=0.3.2,<0.4.0` mit Python 3.13.
-Diese Grenze bezieht sich auf den unveränderten Programmeinstieg, die bestehenden
-Credential-Felder, Token-Speicherung und die zehn bisherigen Tool-Eingabeschemas.
+Starter ab 0.4.0 erlauben stabile Serverversionen `>=0.4.0,<0.5.0` mit Python 3.13.
+Ab 0.4 entfallen Entwicklertoken und Refresh-Token-Import als Einstellungen.
+Alte Token-Dateien werden ignoriert; eine neue Anmeldung speichert Formatversion 2.
+Die 0.4-Grenze umfasst diesen Anmeldevertrag und die bisherigen Tool-Eingabeschemas.
 Regressionstests vergleichen diese Schemas. Die gezielte Ausnahme ab Server 0.3.4
 ist die gewünschte Änderung der Standardausrichtung auf Deutsch/Schweiz. Abfragen
 ohne Sprache und Region verwenden damit einen anderen Markt; explizite Zielwerte

@@ -56,7 +56,7 @@ def test_missing_configuration_is_safe_and_does_not_create_files(tmp_path):
     assert not list(tmp_path.iterdir())
 
 
-@pytest.mark.parametrize("source", ["env", "file", "runtime"])
+@pytest.mark.parametrize("source", ["file", "runtime"])
 def test_local_token_is_not_authenticated_or_live_checked(
     monkeypatch, tmp_path, source
 ):
@@ -65,12 +65,12 @@ def test_local_token_is_not_authenticated_or_live_checked(
     monkeypatch.setenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID", "9876543210")
     if source == "file":
         (tmp_path / "token.json").write_text(
-            json.dumps({"refresh_token": "private-token"})
+            json.dumps({"schema_version": 2, "refresh_token": "private-token"})
         )
     elif source == "runtime":
         monkeypatch.setattr(auth, "_runtime_refresh_token", "private-token")
     else:
-        monkeypatch.setenv("GOOGLE_ADS_REFRESH_TOKEN", "private-token")
+        monkeypatch.setattr(auth, "_runtime_refresh_token", "private-token")
     result = server.connection_status()
     assert result["configuration_status"] == "configured"
     assert result["auth_status"] == "unknown"
@@ -106,7 +106,7 @@ def test_invalid_settings_are_incomplete_without_echoing_values(monkeypatch, fie
 
 def test_customer_id_can_still_be_supplied_per_query(monkeypatch):
     configure(monkeypatch)
-    monkeypatch.setenv("GOOGLE_ADS_REFRESH_TOKEN", "private-token")
+    monkeypatch.setattr(auth, "_runtime_refresh_token", "private-token")
     result = server.connection_status()
     assert result["configuration_status"] == "configured"
     assert "pass customer_id" in result["next_step"]

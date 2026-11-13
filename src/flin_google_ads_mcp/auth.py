@@ -26,6 +26,7 @@ GOOGLE_OAUTH_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 DEFAULT_REDIRECT_URI = "http://localhost:8080/"
 LOCAL_FLOW_TIMEOUT_SECONDS = 600
+TOKEN_SCHEMA_VERSION = 2
 TOKEN_FILE_ENV_VAR = "FLIN_GOOGLE_ADS_TOKEN_FILE"
 DEFAULT_TOKEN_FILE = (
     Path.home() / ".config" / "flin-google-keyword-planner-mcp" / "oauth-token.json"
@@ -204,7 +205,7 @@ def load_persisted_refresh_token() -> str | None:
     except (OSError, UnicodeError, json.JSONDecodeError):
         return None
 
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or payload.get("schema_version") != TOKEN_SCHEMA_VERSION:
         return None
     refresh_token = payload.get("refresh_token")
     if isinstance(refresh_token, str) and refresh_token.strip():
@@ -220,7 +221,7 @@ def persist_refresh_token(refresh_token: str) -> None:
     fd, temporary_path = tempfile.mkstemp(prefix=".oauth-", dir=token_file.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump({"refresh_token": refresh_token}, stream)
+            json.dump({"schema_version": TOKEN_SCHEMA_VERSION, "refresh_token": refresh_token}, stream)
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
@@ -262,12 +263,11 @@ def get_effective_refresh_token(settings: Settings) -> str:
     persisted_refresh_token = load_persisted_refresh_token()
     if persisted_refresh_token:
         return persisted_refresh_token
-    if settings.refresh_token:
-        return settings.refresh_token
     raise ConfigurationError(
-        "No Google Ads refresh token available. Generate one with "
-        "google_ads_authorization_url and google_ads_exchange_authorization_code, "
-        "or set GOOGLE_ADS_REFRESH_TOKEN."
+        "Reconnect Google Ads using google_ads_start_local_oauth_flow and approve "
+        "the Google login. Legacy token files and GOOGLE_ADS_REFRESH_TOKEN are "
+        "no longer accepted. For manual login, use google_ads_authorization_url "
+        "and google_ads_exchange_authorization_code."
     )
 
 
@@ -276,8 +276,6 @@ def get_refresh_token_source() -> str | None:
         return "runtime"
     if load_persisted_refresh_token():
         return "file"
-    if (os.getenv("GOOGLE_ADS_REFRESH_TOKEN") or "").strip():
-        return "env"
     return None
 
 

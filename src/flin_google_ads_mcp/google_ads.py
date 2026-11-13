@@ -270,7 +270,6 @@ def _get_google_ads_client(
         ) from exc
 
     config_dict: dict[str, Any] = {
-        "developer_token": settings.developer_token,
         "client_id": settings.client_id,
         "client_secret": settings.client_secret,
         "refresh_token": get_effective_refresh_token(settings),

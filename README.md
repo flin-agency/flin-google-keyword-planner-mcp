@@ -11,7 +11,7 @@ Die Keyword-Tools lesen Daten und verändern keine Kampagnen.
    Advanced settings → Install Extension…** und die `.mcpb` auswählen.
 3. Die Pflichtfelder aus dem Passwortmanager eintragen. Die Werte erhältst du vom
    zuständigen Administrator; keine Zugangsdaten in den Chat kopieren.
-4. Ohne vorhandenen Refresh Token Claude bitten: **«Starte `google_ads_start_local_oauth_flow`.»**
+4. Claude bitten: **«Starte `google_ads_start_local_oauth_flow`.»**
    Den Google-Link öffnen, das berechtigte Konto wählen und den Zugriff genehmigen.
 5. **«Rufe `connection_status` auf.»** Das prüft die lokale Einrichtung ohne
    Google-Abfrage. Für einen echten Zugriffstest anschliessend ausdrücklich:
@@ -21,23 +21,39 @@ Die Keyword-Tools lesen Daten und verändern keine Kampagnen.
 
 | Feld in Claude | Erforderlich? | Bedeutung |
 | --- | --- | --- |
-| Google Ads developer token | Ja | API-Token des berechtigten Managerkontos |
 | OAuth client ID | Ja | Google-Cloud-OAuth-Client, empfohlen: Desktop app |
 | OAuth client secret | Ja | Zum OAuth-Client gehörendes Secret |
 | Google Ads customer ID | Ja im Desktop-Paket | Zielkonto, zehn Ziffern; Bindestriche sind erlaubt |
 | Manager account ID / `login_customer_id` | Nur bei Zugriff über ein MCC | ID des zugriffsberechtigten Managerkontos, nicht automatisch die Zielkonto-ID |
-| Refresh token | Nein | Kann durch den Browser-Login erzeugt werden |
 
 `connection_status` zeigt die **tatsächlich laufende `server_version`**.
 `configuration_status=configured` bedeutet nur, dass die lokalen Angaben vorliegen.
 Ein vorhandenes Token ergibt `auth_status=unknown`, nicht eine bestätigte Anmeldung;
 `live_access=not_checked` bleibt beim lokalen Statusaufruf unverändert.
 
+## Umstellung auf 0.4.0: einmal neu verbinden
+
+Das Google-Cloud-Projekt der OAuth-Client-ID benötigt **Basic** oder passenden
+Standardzugriff. Explorer unterstützt die Keyword-Planung nicht.
+Entwicklertokens werden weder eingelesen noch an Google gesendet.
+
+Nach Installation von 0.4.0 ist eine neue Google-Anmeldung erforderlich:
+`google_ads_start_local_oauth_flow` aufrufen und den Link im Browser bestätigen.
+Alte Token-Dateien und `GOOGLE_ADS_REFRESH_TOKEN` werden nicht mehr akzeptiert.
+Erst eine erfolgreiche Anmeldung ersetzt die alte Datei mit dem neuen Format;
+danach bleibt die Verbindung über Neustarts erhalten. Bestehende Google-Freigaben
+werden dadurch nicht widerrufen. Die OAuth-Client-ID und das Secret können bleiben.
+
+Desktop-Nutzer müssen das neue 0.4-Paket einmal importieren: Der bisherige
+0.3-Starter lädt absichtlich keine 0.4-Versionen. Das Desktop-Paket setzt voraus,
+dass die 0.4.0-Version auf PyPI veröffentlicht ist; vor der Veröffentlichung
+kann der lokale Checkout verwendet werden (Option B unten).
+
 ## Updates und Hilfe
 
-Die **Erweiterungsversion** bezeichnet den importierten Starter. Ab Starter 0.3.3
+Die **Erweiterungsversion** bezeichnet den importierten Starter. Ab Starter 0.4.0
 lädt jeder Serverneustart automatisch die neueste stabile PyPI-Version im geprüften
-Bereich **`>=0.3.2,<0.4.0`** für Python 3.13. Die **Serverversion** kann daher neuer
+Bereich **`>=0.4.0,<0.5.0`** für Python 3.13. Die **Serverversion** kann daher neuer
 sein. Laufende Sitzungen bleiben bestehen, Einstellungen und Token werden nicht
 umgeschrieben. Vorabversionen und die nächste Minor-Version sind ausgeschlossen.
 
@@ -167,13 +183,11 @@ not evidence of zero search volume. Pagination and idea annotations do not apply
 
 1. Python 3.10+ for manual/developer installation; Claude Desktop manages Python 3.13
 2. Google Ads API credentials:
-- `GOOGLE_ADS_DEVELOPER_TOKEN`
 - `GOOGLE_ADS_CLIENT_ID`
 - `GOOGLE_ADS_CLIENT_SECRET`
 
 Optional:
 
-- `GOOGLE_ADS_REFRESH_TOKEN` (only needed if you want a persistent token instead of generating one in Claude)
 - `GOOGLE_ADS_LOGIN_CUSTOMER_ID`
 - `GOOGLE_ADS_CUSTOMER_ID` (default customer if no `customer_id` argument is passed)
 - `GOOGLE_ADS_USE_PROTO_PLUS` (`true` by default)
@@ -196,9 +210,8 @@ uv run --env-file .env flin-google-keyword-planner-mcp
   "mcpServers": {
     "flin-google-keyword-planner-mcp": {
       "command": "uvx",
-      "args": ["--refresh", "--prerelease", "disallow", "--from", "flin-google-keyword-planner-mcp>=0.3.2,<0.4.0", "flin-google-keyword-planner-mcp"],
+      "args": ["--refresh", "--prerelease", "disallow", "--from", "flin-google-keyword-planner-mcp>=0.4.0,<0.5.0", "flin-google-keyword-planner-mcp"],
       "env": {
-        "GOOGLE_ADS_DEVELOPER_TOKEN": "REPLACE_ME",
         "GOOGLE_ADS_CLIENT_ID": "REPLACE_ME",
         "GOOGLE_ADS_CLIENT_SECRET": "REPLACE_ME",
         "GOOGLE_ADS_CUSTOMER_ID": "1234567890",
@@ -224,7 +237,6 @@ uv run --env-file .env flin-google-keyword-planner-mcp
         "flin-google-keyword-planner-mcp"
       ],
       "env": {
-        "GOOGLE_ADS_DEVELOPER_TOKEN": "REPLACE_ME",
         "GOOGLE_ADS_CLIENT_ID": "REPLACE_ME",
         "GOOGLE_ADS_CLIENT_SECRET": "REPLACE_ME",
         "GOOGLE_ADS_CUSTOMER_ID": "1234567890",

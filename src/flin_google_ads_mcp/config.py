@@ -6,7 +6,6 @@ from functools import lru_cache
 from typing import Mapping
 
 REQUIRED_ENV_VARS = (
-    "GOOGLE_ADS_DEVELOPER_TOKEN",
     "GOOGLE_ADS_CLIENT_ID",
     "GOOGLE_ADS_CLIENT_SECRET",
 )
@@ -36,10 +35,8 @@ def missing_required_env_vars(env: Mapping[str, str] | None = None) -> list[str]
 
 @dataclass(frozen=True)
 class Settings:
-    developer_token: str = field(repr=False)
     client_id: str
     client_secret: str = field(repr=False)
-    refresh_token: str | None = field(repr=False)
     login_customer_id: str | None
     default_customer_id: str | None
     use_proto_plus: bool
@@ -56,10 +53,8 @@ def load_settings() -> Settings:
         )
 
     return Settings(
-        developer_token=os.environ["GOOGLE_ADS_DEVELOPER_TOKEN"].strip(),
         client_id=os.environ["GOOGLE_ADS_CLIENT_ID"].strip(),
         client_secret=os.environ["GOOGLE_ADS_CLIENT_SECRET"].strip(),
-        refresh_token=(os.getenv("GOOGLE_ADS_REFRESH_TOKEN") or "").strip() or None,
         login_customer_id=os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
         default_customer_id=os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
         use_proto_plus=_get_bool("GOOGLE_ADS_USE_PROTO_PLUS", True),

@@ -29,7 +29,7 @@ fest auswählen, zum Beispiel in der [manuellen Konfiguration](README.md#claude-
 
 ```json
 "command": "uv",
-"args": ["tool", "run", "--offline", "--from", "flin-google-keyword-planner-mcp==0.3.4", "flin-google-keyword-planner-mcp"]
+"args": ["tool", "run", "--offline", "--from", "flin-google-keyword-planner-mcp==0.4.0", "flin-google-keyword-planner-mcp"]
 ```
 
 Die vorhandenen Credential-Felder beibehalten. Das funktioniert nur, wenn diese

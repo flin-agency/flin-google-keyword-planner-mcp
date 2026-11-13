@@ -22,12 +22,10 @@ from flin_google_ads_mcp.auth import (
 from flin_google_ads_mcp.config import ConfigurationError, Settings
 
 
-def _settings(refresh_token: str | None = None) -> Settings:
+def _settings() -> Settings:
     return Settings(
-        developer_token="developer-token",
         client_id="client-id",
         client_secret="client-secret",
-        refresh_token=refresh_token,
         login_customer_id=None,
         default_customer_id=None,
         use_proto_plus=True,
@@ -109,13 +107,13 @@ def test_exchange_authorization_code_persists_refresh_token(
         client_id="client-id",
         client_secret="client-secret",
         redirect_uri="http://localhost:8080/",
-        token_request=lambda _payload: {"refresh_token": "persisted-refresh-token"},
+        token_request=lambda _payload: {"schema_version": 2, "refresh_token": "persisted-refresh-token"},
     )
     clear_runtime_refresh_token()
 
     assert get_effective_refresh_token(_settings()) == "persisted-refresh-token"
     assert json.loads(token_file.read_text(encoding="utf-8")) == {
-        "refresh_token": "persisted-refresh-token"
+        "schema_version": 2, "refresh_token": "persisted-refresh-token"
     }
 
 
@@ -126,12 +124,12 @@ def test_persisted_refresh_token_takes_precedence_over_env_token(
     token_file = tmp_path / "oauth-token.json"
     monkeypatch.setenv("FLIN_GOOGLE_ADS_TOKEN_FILE", str(token_file))
     token_file.write_text(
-        json.dumps({"refresh_token": "persisted-refresh-token"}),
+        json.dumps({"schema_version": 2, "refresh_token": "persisted-refresh-token"}),
         encoding="utf-8",
     )
     clear_runtime_refresh_token()
 
-    assert get_effective_refresh_token(_settings("expired-env-token")) == (
+    assert get_effective_refresh_token(_settings()) == (
         "persisted-refresh-token"
     )
 
@@ -143,7 +141,7 @@ def test_local_authorization_status_reports_persisted_token(
     token_file = tmp_path / "oauth-token.json"
     monkeypatch.setenv("FLIN_GOOGLE_ADS_TOKEN_FILE", str(token_file))
     token_file.write_text(
-        json.dumps({"refresh_token": "persisted-refresh-token"}),
+        json.dumps({"schema_version": 2, "refresh_token": "persisted-refresh-token"}),
         encoding="utf-8",
     )
     clear_runtime_refresh_token()
@@ -184,16 +182,16 @@ def test_get_effective_refresh_token_prefers_runtime_token() -> None:
         token_request=lambda _payload: {"refresh_token": "runtime-refresh-token"},
     )
 
-    assert get_effective_refresh_token(_settings("env-refresh-token")) == (
+    assert get_effective_refresh_token(_settings()) == (
         "runtime-refresh-token"
     )
 
 
-def test_get_effective_refresh_token_requires_generated_or_env_token() -> None:
+def test_get_effective_refresh_token_requires_new_login() -> None:
     clear_runtime_refresh_token()
 
     with pytest.raises(
-        ConfigurationError, match="No Google Ads refresh token available"
+        ConfigurationError, match="Reconnect Google Ads"
     ):
         get_effective_refresh_token(_settings())
 
@@ -580,3 +578,59 @@ def test_unrecognized_google_error_is_not_exposed(monkeypatch):
     assert result['error']['code'] == 'GOOGLE_TOKEN_ERROR'
     assert 'HTTP 400' in result['error']['message']
     assert 'private-' not in json.dumps(result)
+
+
+@pytest.mark.parametrize("payload", [
+    {"refresh_token": "legacy-token"},
+    {"schema_version": 1, "refresh_token": "legacy-token"},
+])
+def test_migration_requires_login_and_preserves_old_file(monkeypatch, tmp_path, payload):
+    from flin_google_ads_mcp import auth
+
+    path = tmp_path / "oauth-token.json"
+    path.write_text(json.dumps(payload))
+    old_content = path.read_bytes()
+    monkeypatch.setenv("GOOGLE_ADS_REFRESH_TOKEN", "legacy-env-token")
+    assert auth.get_refresh_token_source() is None
+    assert auth.get_local_authorization_flow_status()["token_available"] is False
+    with pytest.raises(ConfigurationError, match="Reconnect Google Ads"):
+        get_effective_refresh_token(_settings())
+    assert path.read_bytes() == old_content
+    exchange_authorization_code(
+        code="fresh-code", client_id="client-id", client_secret="secret",
+        token_request=lambda _: {"refresh_token": "new-token"},
+    )
+    clear_runtime_refresh_token()
+    assert get_effective_refresh_token(_settings()) == "new-token"
+    assert auth.get_refresh_token_source() == "file"
+
+
+def test_real_sdk_accepts_new_login_without_developer_token(monkeypatch):
+    from google.ads.googleads import oauth2
+    from google.ads.googleads.interceptors import MetadataInterceptor
+    from google.auth.credentials import AnonymousCredentials
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN", "obsolete-token")
+    monkeypatch.setenv("GOOGLE_ADS_CLIENT_ID", "client-id")
+    monkeypatch.setenv("GOOGLE_ADS_CLIENT_SECRET", "secret")
+    monkeypatch.setattr(oauth2, "get_credentials", lambda _: AnonymousCredentials())
+    google_ads.load_settings.cache_clear()
+    google_ads.clear_google_ads_client_cache()
+    try:
+        exchange_authorization_code(
+            code="code", client_id="client-id", client_secret="secret",
+            token_request=lambda _: {"refresh_token": "new-token"},
+        )
+        client = google_ads.get_google_ads_client()
+        assert client.developer_token is None
+        interceptor = MetadataInterceptor(developer_token=client.developer_token)
+        details = SimpleNamespace(method="/test", timeout=30, metadata=[],
+                                  credentials=None, wait_for_ready=False, compression=None)
+        metadata = interceptor.intercept_unary_unary(
+            lambda call, _: call.metadata, details, object()
+        )
+        assert not any(key == "developer-token" for key, _ in metadata)
+    finally:
+        google_ads.load_settings.cache_clear()
+        google_ads.clear_google_ads_client_cache()

@@ -5,6 +5,7 @@ import asyncio
 import json
 import importlib.util
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -14,7 +15,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
-async def smoke(bundle: Path, expected_version: str | None = None) -> None:
+async def smoke(bundle: Path, expected_version: str | None = None, local_source: bool = False) -> None:
     with tempfile.TemporaryDirectory(prefix="flin desktop ") as directory:
         root = Path(directory)
         with ZipFile(bundle) as archive:
@@ -60,6 +61,10 @@ async def smoke(bundle: Path, expected_version: str | None = None) -> None:
                 "FLIN_GOOGLE_ADS_TOKEN_FILE": str(root / "test-token.json"),
             },
         )
+        if local_source:
+            params.command = sys.executable
+            params.args = ["-m", "flin_google_ads_mcp.server"]
+            params.env["PYTHONPATH"] = str(root / "src")
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
@@ -100,12 +105,11 @@ async def smoke(bundle: Path, expected_version: str | None = None) -> None:
             # Restart the same extracted extension with fake saved credentials.
             # No Google calls: only local connection_status is exercised.
             token_file = root / "test-token.json"
-            token_file.write_text('{"refresh_token":"smoke-private-token"}\n')
+            token_file.write_text('{"schema_version":2,"refresh_token":"smoke-private-token"}\n')
             token_file.chmod(0o600)
             original = token_file.read_bytes()
             params.env.update(
                 {
-                    "GOOGLE_ADS_DEVELOPER_TOKEN": "smoke-private-developer",
                     "GOOGLE_ADS_CLIENT_ID": "smoke-private-client",
                     "GOOGLE_ADS_CLIENT_SECRET": "smoke-private-secret",
                     "GOOGLE_ADS_CUSTOMER_ID": "1234567890",
@@ -137,5 +141,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("bundle", type=Path)
     parser.add_argument("--expected-version")
+    parser.add_argument("--local-source", action="store_true", help="Test bundled sources before publication, using the current Python environment.")
     args = parser.parse_args()
-    asyncio.run(smoke(args.bundle, args.expected_version))
+    if args.local_source and args.expected_version:
+        parser.error("--local-source cannot verify a published --expected-version")
+    asyncio.run(smoke(args.bundle, args.expected_version, args.local_source))
