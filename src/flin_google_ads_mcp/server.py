@@ -8,6 +8,7 @@ from mcp.types import ToolAnnotations
 from . import __version__
 from .auth import (
     DEFAULT_REDIRECT_URI,
+    OAuthFlowError,
     build_authorization_url,
     exchange_authorization_code,
     get_local_authorization_flow_status,
@@ -36,7 +37,10 @@ mcp = FastMCP(
 
 
 def _error_payload(exc: Exception) -> dict[str, Any]:
-    return {"ok": False, "error": format_google_ads_error(exc)}
+    error = format_google_ads_error(exc)
+    if isinstance(exc, OAuthFlowError):
+        error.update(code=exc.code, stage=exc.stage)
+    return {"ok": False, "error": error}
 
 
 @mcp.tool(

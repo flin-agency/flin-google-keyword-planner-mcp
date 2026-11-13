@@ -453,3 +453,130 @@ def test_callback_reports_safe_failure_reason(monkeypatch, failure, expected):
     assert expected in status["error"]
     assert "private-secret" not in json.dumps(status)
     assert status["token_available"] is False
+
+
+@pytest.mark.parametrize('kind, expected', [
+    ('certificate', 'TLS_CERTIFICATE_ERROR'), ('tls', 'TLS_ERROR'),
+    ('timeout', 'NETWORK_TIMEOUT'), ('dns', 'NETWORK_DNS'),
+    ('refused', 'NETWORK_REFUSED'), ('reset', 'NETWORK_RESET'),
+])
+@pytest.mark.parametrize('wrapped', [False, True])
+def test_network_diagnostics_reach_browser_and_status(monkeypatch, kind, expected, wrapped):
+    import socket
+    import ssl
+    from urllib.error import HTTPError, URLError
+    from flin_google_ads_mcp import auth
+
+    failures = {
+        'certificate': ssl.SSLCertVerificationError(1, 'private-secret'),
+        'tls': ssl.SSLError(1, 'private-secret'),
+        'timeout': TimeoutError('private-secret'),
+        'dns': socket.gaierror(-2, 'private-secret'),
+        'refused': ConnectionRefusedError('private-secret'),
+        'reset': ConnectionResetError('private-secret'),
+    }
+    def fail(*args, **kwargs):
+        error = failures[kind]
+        raise URLError(error) if wrapped else error
+    monkeypatch.setattr(auth, 'urlopen', fail)
+    flow = start_local_authorization_flow(settings=_settings(), redirect_uri='http://127.0.0.1:0/')
+    with pytest.raises(HTTPError) as error:
+        urlopen(flow['redirect_uri'] + '?state=' + flow['state'] + '&code=private-code', timeout=5)
+    body = error.value.read().decode()
+    status = get_local_authorization_flow_status()
+    assert status['error_code'] == expected
+    assert status['error_stage'] == 'token_exchange'
+    assert expected in body
+    for secret in ['private-secret', 'private-code', 'client-secret']:
+        assert secret not in body + json.dumps(status)
+
+
+@pytest.mark.parametrize('failure, expected', [
+    ('permission', 'TOKEN_STORAGE_PERMISSION'), ('full', 'TOKEN_STORAGE_FULL'),
+    ('readonly', 'TOKEN_STORAGE_READ_ONLY'), ('path', 'TOKEN_STORAGE_PATH'),
+    ('io', 'TOKEN_STORAGE_IO'),
+])
+def test_storage_preflight_stops_before_code_exchange(monkeypatch, failure, expected):
+    import errno
+    from flin_google_ads_mcp import auth, server
+    failures = {'permission': errno.EACCES, 'full': errno.ENOSPC,
+                'readonly': errno.EROFS, 'path': errno.ENOTDIR, 'io': errno.EIO}
+    def fail(*args, **kwargs):
+        raise OSError(failures[failure], 'private-secret', '/private-sensitive-path')
+    monkeypatch.setattr(auth.tempfile, 'TemporaryDirectory', fail)
+    monkeypatch.setattr(server, 'load_settings', _settings)
+    def should_not_exchange(*args, **kwargs):
+        pytest.fail('Must not consume the authorization code when storage fails')
+    monkeypatch.setattr(auth, '_request_google_token', should_not_exchange)
+    result = server.google_ads_exchange_authorization_code('private-code')
+    assert result['ok'] is False
+    assert result['error']['code'] == expected
+    assert result['error']['stage'] == 'storage_check'
+    assert 'private-' not in json.dumps(result)
+    result = server.google_ads_start_local_oauth_flow('http://127.0.0.1:0/')
+    assert result['error']['code'] == expected
+    assert 'authorization_url' not in result
+    assert auth._local_flow is None
+
+
+def test_preflight_preserves_existing_token_and_cleans_probe(tmp_path, monkeypatch):
+    from flin_google_ads_mcp import auth
+    token = tmp_path / 'new' / 'directory' / 'token.json'
+    monkeypatch.setenv(auth.TOKEN_FILE_ENV_VAR, str(token))
+    auth.check_token_storage()
+    assert token.parent.stat().st_mode & 0o777 == 0o700
+    assert list(token.parent.iterdir()) == []
+    auth.persist_refresh_token('existing-token')
+    before = token.read_bytes()
+    auth.check_token_storage()
+    assert token.read_bytes() == before
+    assert list(token.parent.iterdir()) == [token]
+    token.unlink()
+    token.mkdir()
+    with pytest.raises(auth.OAuthFlowError) as error:
+        auth.check_token_storage()
+    assert error.value.code == 'TOKEN_STORAGE_PATH'
+
+
+def test_save_failure_after_successful_preflight_is_distinct(monkeypatch):
+    import errno
+    from flin_google_ads_mcp import auth, server
+    monkeypatch.setattr(server, 'load_settings', _settings)
+    monkeypatch.setattr(auth, '_request_google_token', lambda _: {'refresh_token': 'private-token'})
+    def fail(_):
+        raise OSError(errno.ENOSPC, 'private-secret')
+    monkeypatch.setattr(auth, 'persist_refresh_token', fail)
+    result = server.google_ads_exchange_authorization_code('private-code')
+    assert result['error']['code'] == 'TOKEN_STORAGE_FULL'
+    assert result['error']['stage'] == 'token_save'
+    assert 'private-' not in json.dumps(result)
+    assert auth._runtime_refresh_token is None
+
+
+def test_port_collision_is_actionable(monkeypatch):
+    import socket
+    from flin_google_ads_mcp import server
+    monkeypatch.setattr(server, 'load_settings', _settings)
+    with socket.socket() as listener:
+        listener.bind(('127.0.0.1', 0))
+        listener.listen()
+        result = server.google_ads_start_local_oauth_flow(
+            f'http://127.0.0.1:{listener.getsockname()[1]}/')
+    assert result['error']['code'] == 'CALLBACK_PORT_IN_USE'
+    assert result['error']['stage'] == 'callback_start'
+    assert '127.0.0.1:0' in result['error']['message']
+
+
+def test_unrecognized_google_error_is_not_exposed(monkeypatch):
+    from io import BytesIO
+    from urllib.error import HTTPError
+    from flin_google_ads_mcp import auth, server
+    monkeypatch.setattr(server, 'load_settings', _settings)
+    def fail(*args, **kwargs):
+        raise HTTPError('https://example.com/private-code', 400, 'private-secret', {},
+                        BytesIO(b'{"error":"private-secret","error_description":"private-token"}'))
+    monkeypatch.setattr(auth, 'urlopen', fail)
+    result = server.google_ads_exchange_authorization_code('private-code')
+    assert result['error']['code'] == 'GOOGLE_TOKEN_ERROR'
+    assert 'HTTP 400' in result['error']['message']
+    assert 'private-' not in json.dumps(result)

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import base64
+import errno
 import hashlib
 import json
 import os
 import secrets
+import socket
+import ssl
 import tempfile
 import threading
 from collections.abc import Callable, Mapping
@@ -38,8 +41,70 @@ TokenRequest = Callable[[dict[str, str]], Mapping[str, Any]]
 class OAuthFlowError(ConfigurationError):
     """An OAuth failure with an application-owned, secret-free message."""
 
+    def __init__(self, message: str, *, code: str = "OAUTH_ERROR", stage: str = "token_exchange"):
+        super().__init__(message)
+        self.code = code
+        self.stage = stage
 
-def _token_error_message(response: Mapping[str, Any]) -> str:
+
+def _storage_error(exc: OSError, stage: str) -> OAuthFlowError:
+    code, detail = "TOKEN_STORAGE_IO", "The operating system could not complete the file operation."
+    if isinstance(exc, PermissionError) or exc.errno in {errno.EACCES, errno.EPERM}:
+        code, detail = "TOKEN_STORAGE_PERMISSION", "Write access was denied. Check ownership, folder permissions and app or company restrictions."
+    elif exc.errno in {errno.ENOSPC, errno.EDQUOT}:
+        code, detail = "TOKEN_STORAGE_FULL", "The disk is full or the user storage quota is exhausted."
+    elif exc.errno == errno.EROFS:
+        code, detail = "TOKEN_STORAGE_READ_ONLY", "The storage location is on a read-only filesystem."
+    elif isinstance(exc, (NotADirectoryError, IsADirectoryError, FileExistsError)) or exc.errno in {errno.ENOENT, errno.ELOOP, errno.ENAMETOOLONG}:
+        code, detail = "TOKEN_STORAGE_PATH", "The token path is invalid, unavailable, or conflicts with a file or directory."
+    prefix = (
+        "Google OAuth succeeded, but the refresh token could not be saved. "
+        if stage == "token_save" else "Token storage check failed before contacting Google. "
+    )
+    return OAuthFlowError(
+        prefix + detail + " Check FLIN_GOOGLE_ADS_TOKEN_FILE if configured; otherwise check ~/.config/flin-google-keyword-planner-mcp/. Then start a new OAuth flow.",
+        code=code, stage=stage,
+    )
+
+
+def check_token_storage() -> None:
+    """Probe create/write/flush/replace/delete without touching an existing token."""
+    try:
+        token_file = get_token_file_path()
+        token_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if token_file.exists() and not token_file.is_file():
+            raise IsADirectoryError(errno.EISDIR, "Invalid token target")
+        with tempfile.TemporaryDirectory(prefix=".oauth-check-", dir=token_file.parent) as directory:
+            source = Path(directory) / "probe"
+            target = Path(directory) / "replaced"
+            with source.open("wb") as stream:
+                stream.write(b"storage-check")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(source, target)
+    except OSError as exc:
+        raise _storage_error(exc, "storage_check") from exc
+
+
+def _network_error(exc: OSError) -> OAuthFlowError:
+    reason = exc.reason if isinstance(exc, URLError) else exc
+    code, detail = "NETWORK_ERROR", "Google OAuth token endpoint could not be reached. Check internet access, proxy and firewall settings."
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        code, detail = "TLS_CERTIFICATE_ERROR", "Google OAuth TLS certificate verification failed. Check the Mac date/time and trusted certificates, including any company proxy certificate. Do not disable certificate verification."
+    elif isinstance(reason, ssl.SSLError):
+        code, detail = "TLS_ERROR", "The secure connection to Google OAuth failed. Check proxy, VPN and TLS settings."
+    elif isinstance(reason, TimeoutError):
+        code, detail = "NETWORK_TIMEOUT", "The connection to Google OAuth timed out. Check internet access, proxy and firewall settings, then start a new flow."
+    elif isinstance(reason, socket.gaierror):
+        code, detail = "NETWORK_DNS", "The Google OAuth hostname could not be resolved. Check DNS, internet access and VPN settings."
+    elif isinstance(reason, ConnectionRefusedError):
+        code, detail = "NETWORK_REFUSED", "The connection to Google OAuth or the configured proxy was refused. Check proxy and firewall settings."
+    elif isinstance(reason, ConnectionResetError):
+        code, detail = "NETWORK_RESET", "The connection to Google OAuth was reset. Check proxy, VPN and firewall settings."
+    return OAuthFlowError(detail, code=code)
+
+
+def _token_error(response: Mapping[str, Any]) -> OAuthFlowError:
     # Never reflect Google's error_description or arbitrary error values.
     messages = {
         "invalid_grant": "Google OAuth rejected the code (invalid_grant). Start a new OAuth flow; the code may be expired, already used, or not match the redirect URI or PKCE verifier.",
@@ -47,11 +112,14 @@ def _token_error_message(response: Mapping[str, Any]) -> str:
         "unauthorized_client": "Google OAuth rejected this client for code exchange (unauthorized_client). Check the OAuth client configuration.",
         "redirect_uri_mismatch": "Google OAuth rejected the redirect URI (redirect_uri_mismatch). Check the OAuth client's redirect URI.",
         "invalid_scope": "Google OAuth rejected the requested scope (invalid_scope). Check Google Ads OAuth access.",
+        "invalid_request": "Google OAuth rejected the token request (invalid_request). Check the OAuth client type and start a new flow.",
+        "temporarily_unavailable": "Google OAuth is temporarily unavailable. Try a new login later.",
+        "server_error": "Google OAuth reported a server error. Try a new login later.",
     }
     error = response.get("error")
     if isinstance(error, str) and error in messages:
-        return messages[error]
-    return "Google OAuth token exchange failed. Check the OAuth client and use a fresh code."
+        return OAuthFlowError(messages[error], code="GOOGLE_" + error.upper())
+    return OAuthFlowError("Google OAuth token exchange failed. Check the OAuth client and use a fresh code.", code="GOOGLE_TOKEN_ERROR")
 
 
 @dataclass
@@ -65,6 +133,8 @@ class LocalAuthorizationFlow:
     timer: threading.Timer | None = field(default=None, repr=False)
     status: str = "pending"
     error: str | None = None
+    error_code: str | None = None
+    error_stage: str | None = None
     token_available: bool = False
 
 
@@ -129,9 +199,6 @@ def get_token_file_path() -> Path:
 
 def load_persisted_refresh_token() -> str | None:
     token_file = get_token_file_path()
-    if not token_file.exists():
-        return None
-
     try:
         payload = json.loads(token_file.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
@@ -231,17 +298,18 @@ def _request_google_token(payload: dict[str, str]) -> Mapping[str, Any]:
         except (OSError, UnicodeError, ValueError):
             error_response = None
         if isinstance(error_response, dict) and "error" in error_response:
-            raise OAuthFlowError(_token_error_message(error_response)) from exc
+            error = _token_error(error_response)
+            error.args = (f"{error} (HTTP {exc.code})",)
+            raise error from exc
         raise OAuthFlowError(
             f"Google OAuth token exchange failed with HTTP {exc.code}. "
-            "Check the OAuth client and generate a fresh authorization code."
+            "Check the OAuth client and generate a fresh authorization code.",
+            code="GOOGLE_HTTP_ERROR",
         ) from exc
-    except (URLError, TimeoutError) as exc:
-        raise OAuthFlowError(
-            "Google OAuth token endpoint could not be reached."
-        ) from exc
+    except OSError as exc:
+        raise _network_error(exc) from exc
     except (UnicodeError, ValueError) as exc:
-        raise OAuthFlowError("Google OAuth returned an invalid token response.") from exc
+        raise OAuthFlowError("Google OAuth returned an invalid token response.", code="TOKEN_RESPONSE_INVALID") from exc
 
 
 def exchange_authorization_code(
@@ -255,6 +323,7 @@ def exchange_authorization_code(
 ) -> str:
     redirect_uri, _, _, _ = _normalize_loopback_redirect_uri(redirect_uri)
     cleaned_code = extract_authorization_code(code)
+    check_token_storage()
 
     payload = {
         "code": cleaned_code,
@@ -268,24 +337,22 @@ def exchange_authorization_code(
     response = (token_request or _request_google_token)(payload)
 
     if not isinstance(response, Mapping):
-        raise OAuthFlowError("Google OAuth returned an invalid token response.")
+        raise OAuthFlowError("Google OAuth returned an invalid token response.", code="TOKEN_RESPONSE_INVALID")
     if "error" in response:
-        raise OAuthFlowError(_token_error_message(response))
+        raise _token_error(response)
 
     refresh_token = response.get("refresh_token")
     if not isinstance(refresh_token, str) or not refresh_token.strip():
         raise OAuthFlowError(
             "Google OAuth response did not contain a refresh token. "
-            "Generate a fresh authorization URL and approve offline access again."
+            "Generate a fresh authorization URL and approve offline access again.",
+            code="REFRESH_TOKEN_MISSING",
         )
 
     try:
         return set_runtime_refresh_token(refresh_token)
     except OSError as exc:
-        raise OAuthFlowError(
-            "Google OAuth succeeded, but the refresh token could not be saved. "
-            "Check permissions and free space for FLIN_GOOGLE_ADS_TOKEN_FILE, then start a new OAuth flow."
-        ) from exc
+        raise _storage_error(exc, "token_save") from exc
 
 
 def _normalize_loopback_redirect_uri(redirect_uri: str) -> tuple[str, str, int, str]:
@@ -332,6 +399,7 @@ def start_local_authorization_flow(
     normalized_redirect_uri, host, port, path = _normalize_loopback_redirect_uri(
         redirect_uri
     )
+    check_token_storage()
 
     if _local_flow and _local_flow.status == "pending":
         _local_flow.status = "cancelled"
@@ -371,11 +439,12 @@ def start_local_authorization_flow(
             try:
                 if params.get("error"):
                     raise OAuthFlowError(
-                        "Google OAuth authorization failed. Start a new authorization flow."
+                        "Google OAuth authorization failed or access was denied. Start a new authorization flow.",
+                        code="GOOGLE_AUTHORIZATION_DENIED", stage="authorization",
                     )
                 code = params.get("code", [""])[0]
                 if not code.strip():
-                    raise OAuthFlowError("Google OAuth callback did not contain a code. Start a new OAuth flow.")
+                    raise OAuthFlowError("Google OAuth callback did not contain a code. Start a new OAuth flow.", code="CALLBACK_CODE_MISSING", stage="callback")
                 exchange_authorization_code(
                     code=code,
                     client_id=settings.client_id,
@@ -394,7 +463,9 @@ def start_local_authorization_flow(
                     str(exc) if isinstance(exc, OAuthFlowError)
                     else "Authentication failed. Check credentials and start a new OAuth flow."
                 )
-                body = "Authentication failed. Check OAuth status in your MCP client."
+                flow.error_code = exc.code if isinstance(exc, OAuthFlowError) else "OAUTH_INTERNAL_ERROR"
+                flow.error_stage = exc.stage if isinstance(exc, OAuthFlowError) else "callback"
+                body = f"Authentication failed [{flow.error_code}; {flow.error_stage}]. {flow.error}"
                 self.send_response(400)
 
             self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -406,7 +477,23 @@ def start_local_authorization_flow(
             finally:
                 _stop_local_flow_server(flow.server)
 
-    server = ThreadingHTTPServer((host, port), OAuthCallbackHandler)
+    try:
+        server = ThreadingHTTPServer((host, port), OAuthCallbackHandler)
+    except OSError as exc:
+        if exc.errno == errno.EADDRINUSE:
+            raise OAuthFlowError(
+                "The local OAuth port is already in use. Close another login session or, for a Desktop OAuth client, use redirect_uri=http://127.0.0.1:0/. Web clients require their registered redirect URI.",
+                code="CALLBACK_PORT_IN_USE", stage="callback_start",
+            ) from exc
+        if isinstance(exc, PermissionError):
+            raise OAuthFlowError(
+                "The operating system denied permission to open the local OAuth listener. Check app or company network restrictions and use an unprivileged loopback port.",
+                code="CALLBACK_PERMISSION", stage="callback_start",
+            ) from exc
+        raise OAuthFlowError(
+            "The local OAuth listener could not start. Check local network permissions and the loopback address and port.",
+            code="CALLBACK_LISTENER_ERROR", stage="callback_start",
+        ) from exc
     actual_redirect_uri = _redirect_uri_with_bound_port(
         normalized_redirect_uri,
         server.server_address[1],
@@ -434,6 +521,8 @@ def start_local_authorization_flow(
                 return
             flow.status = "expired"
             flow.error = "OAuth flow expired. Start a new authorization flow."
+            flow.error_code = "OAUTH_EXPIRED"
+            flow.error_stage = "authorization"
         _stop_local_flow_server(server)
 
     flow.timer = threading.Timer(LOCAL_FLOW_TIMEOUT_SECONDS, expire)
@@ -455,6 +544,8 @@ def get_local_authorization_flow_status() -> dict[str, Any]:
             "token_available": token_source is not None,
             "token_source": token_source,
             "error": None,
+            "error_code": None,
+            "error_stage": None,
         }
 
     return {
@@ -462,5 +553,7 @@ def get_local_authorization_flow_status() -> dict[str, Any]:
         "token_available": _local_flow.token_available or token_source is not None,
         "token_source": token_source,
         "error": _local_flow.error,
+        "error_code": _local_flow.error_code,
+        "error_stage": _local_flow.error_stage,
         "redirect_uri": _local_flow.redirect_uri,
     }

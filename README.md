@@ -271,6 +271,15 @@ Authorization requests only the Google Ads scope and does not opt into combining
 previously granted scopes. Code exchange uses Python's HTTP client directly, not
 oauthlib's scope validation, so `OAUTHLIB_RELAX_TOKEN_SCOPE` does not affect this flow.
 
+Since 0.3.6, OAuth failures include a stable diagnostic code and stage. Errors
+returned directly by a tool contain `error.code` and `error.stage`; callback errors
+appear in `google_ads_oauth_status` as `error_code` and `error_stage`, and on the
+browser completion page. The token directory is checked for create/write/flush/
+replace/delete access before starting local login and before exchanging a code.
+The probe does not read or replace an existing token. A successful probe cannot
+guarantee a later save (for example, if disk space or permissions change).
+See [diagnostic codes and test instructions](SUPPORT.md#oauth-diagnose-ab-036).
+
 ## Security
 
 - Never commit real credentials to git.
